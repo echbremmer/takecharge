@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fasting Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 2rem;
+      color: #94a3b8;
+      font-weight: 400;
+      letter-spacing: 0.05em;
+    }
+
+    .timer-section {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .status {
+      font-size: 1rem;
+      color: #64748b;
+      margin-bottom: 0.5rem;
+    }
+
+    .status.active {
+      color: #4ade80;
+    }
+
+    .timer {
+      font-size: 4rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      margin-bottom: 0.5rem;
+    }
+
+    .start-time {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 1.5rem;
+    }
+
+    button {
+      font-size: 1rem;
+      padding: 0.75rem 2.5rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+
+    button:hover { opacity: 0.85; }
+
+    .btn-start {
+      background: #4ade80;
+      color: #0f172a;
+    }
+
+    .btn-stop {
+      background: #f87171;
+      color: #0f172a;
+    }
+
+    .history {
+      width: 100%;
+      max-width: 500px;
+      margin-top: 2rem;
+    }
+
+    .history h2 {
+      font-size: 1rem;
+      color: #64748b;
+      margin-bottom: 1rem;
+      font-weight: 400;
+    }
+
+    .session {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .session-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .session-date {
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+
+    .session-duration {
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    .session-times {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    .session-estimates {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #334155;
+    }
+
+    .estimate {
+      flex: 1;
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .estimate-label {
+      font-size: 0.65rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.2rem;
+    }
+
+    .estimate-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .estimate-value.water {
+      color: #38bdf8;
+    }
+
+    .estimate-value.fat {
+      color: #fb923c;
+    }
+
+    .no-history {
+      color: #475569;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .delete-btn {
+      background: none;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 0.25rem 0.5rem;
+      line-height: 1;
+    }
+
+    .delete-btn:hover {
+      color: #f87171;
+    }
+
+    /* Dial */
+    .dial-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .dial-container.visible {
+      display: flex;
+    }
+
+    .dial-label {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-bottom: 0.5rem;
+    }
+
+    .dial {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, #1e293b 0deg, #334155 30deg, #1e293b 60deg, #334155 90deg, #1e293b 120deg, #334155 150deg, #1e293b 180deg, #334155 210deg, #1e293b 240deg, #334155 270deg, #1e293b 300deg, #334155 330deg, #1e293b 360deg);
+      border: 3px solid #475569;
+      position: relative;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      transition: border-color 0.15s;
+    }
+
+    .dial:hover {
+      border-color: #64748b;
+    }
+
+    .dial:active {
+      cursor: grabbing;
+    }
+
+    .dial-indicator {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 14px;
+      background: #4ade80;
+      border-radius: 2px;
+    }
+
+    .dial.click-flash {
+      border-color: #4ade80;
+    }
+
+    .dial-hint {
+      font-size: 0.7rem;
+      color: #475569;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>FASTING TRACKER</h1>
+
+  <div class="timer-section">
+    <div class="status" id="status">Not fasting</div>
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="start-time" id="startTime"></div>
+    <div class="dial-container" id="dialContainer">
+      <div class="dial-label">Adjust start time</div>
+      <div class="dial" id="dial">
+        <div class="dial-indicator" id="dialIndicator"></div>
+      </div>
+      <div class="dial-hint">Spin to move start back by 5 min per click</div>
+    </div>
+    <button class="btn-start" id="toggleBtn" onclick="toggle()">Start Fast</button>
+  </div>
+
+  <div class="history">
+    <h2>History</h2>
+    <div id="history"></div>
+  </div>
+
+  <script>
+    let timerInterval = null;
+    let activeStart = null; // in-memory cache of active fast start time
+
+    // --- API helpers ---
+    async function apiGet(path) {
+      const res = await fetch(path);
+      if (!res.ok) return null;
+      return res.json();
+    }
+
+    async function apiPost(path, body) {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) return null;
+      return res.json();
+    }
+
+    async function apiPut(path, body) {
+      const res = await fetch(path, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) return null;
+      return res.json();
+    }
+
+    async function apiDelete(path) {
+      const res = await fetch(path, { method: 'DELETE' });
+      if (res.status === 200) return res.json();
+      return res.ok;
+    }
+
+    // --- Formatting ---
+    function formatDuration(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+      const s = String(totalSec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function formatTime(ts) {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDate(ts) {
+      return new Date(ts).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+
+    // --- Timer ---
+    function updateTimer() {
+      if (activeStart) {
+        const elapsed = Date.now() - activeStart;
+        document.getElementById('timer').textContent = formatDuration(elapsed);
+      }
+    }
+
+    function startTimer() {
+      timerInterval = setInterval(updateTimer, 1000);
+      updateTimer();
+    }
+
+    // --- Toggle fast ---
+    async function toggle() {
+      const btn = document.getElementById('toggleBtn');
+      const status = document.getElementById('status');
+      const startTimeEl = document.getElementById('startTime');
+
+      if (activeStart) {
+        // Stop fast — DELETE /api/active auto-creates a session
+        await apiDelete('/api/active');
+        activeStart = null;
+        clearInterval(timerInterval);
+
+        btn.textContent = 'Start Fast';
+        btn.className = 'btn-start';
+        status.textContent = 'Not fasting';
+        status.className = 'status';
+        startTimeEl.textContent = '';
+        document.getElementById('timer').textContent = '00:00:00';
+        hideDial();
+
+        renderHistory();
+      } else {
+        // Start fast
+        const now = Date.now();
+        await apiPost('/api/active', { start: now });
+        activeStart = now;
+
+        btn.textContent = 'Stop Fast';
+        btn.className = 'btn-stop';
+        status.textContent = 'Fasting';
+        status.className = 'status active';
+        startTimeEl.textContent = `Started at ${formatTime(now)}`;
+
+        showDial();
+        startTimer();
+      }
+    }
+
+    // --- Estimates ---
+    function estimateFatLoss(ms) {
+      const hours = ms / 3600000;
+      return hours * 10.8;
+    }
+
+    function estimateWaterLoss(ms) {
+      const hours = ms / 3600000;
+      const maxWater = 1200;
+      return maxWater * (1 - Math.exp(-hours / 12));
+    }
+
+    function formatWeight(grams) {
+      if (grams >= 1000) return (grams / 1000).toFixed(2) + ' kg';
+      return Math.round(grams) + ' g';
+    }
+
+    // --- Delete session ---
+    async function deleteSession(id) {
+      await apiDelete(`/api/sessions/${id}`);
+      renderHistory();
+    }
+
+    // --- Render history ---
+    async function renderHistory() {
+      const sessions = await apiGet('/api/sessions') || [];
+      const el = document.getElementById('history');
+
+      if (sessions.length === 0) {
+        el.innerHTML = '<div class="no-history">No fasting sessions recorded yet.</div>';
+        return;
+      }
+
+      el.innerHTML = sessions.map(s => {
+        const water = estimateWaterLoss(s.duration);
+        const fat = estimateFatLoss(s.duration);
+        return `
+        <div class="session">
+          <div class="session-top">
+            <div>
+              <div class="session-date">${formatDate(s.start)}</div>
+              <div class="session-times">${formatTime(s.start)} – ${formatTime(s.end)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <div class="session-duration">${formatDuration(s.duration)}</div>
+              <button class="delete-btn" onclick="deleteSession(${s.id})" title="Delete">&times;</button>
+            </div>
+          </div>
+          <div class="session-estimates">
+            <div class="estimate">
+              <div class="estimate-label">Water weight</div>
+              <div class="estimate-value water">${formatWeight(water)}</div>
+            </div>
+            <div class="estimate">
+              <div class="estimate-label">Fat loss</div>
+              <div class="estimate-value fat">${formatWeight(fat)}</div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // --- Dial logic ---
+    const dial = document.getElementById('dial');
+    const dialIndicator = document.getElementById('dialIndicator');
+    const dialContainer = document.getElementById('dialContainer');
+    let dialAngle = 0;
+    let dialDragging = false;
+    let dialLastAngle = null;
+    let dialAccum = 0;
+    const CLICK_DEGREES = 30;
+    const FIVE_MIN_MS = 5 * 60 * 1000;
+
+    function playClick() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'square';
+        osc.frequency.value = 1200;
+        gain.gain.value = 0.08;
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.04);
+      } catch (e) {}
+    }
+
+    function flashDial() {
+      dial.classList.add('click-flash');
+      setTimeout(() => dial.classList.remove('click-flash'), 120);
+    }
+
+    function getAngleFromEvent(e) {
+      const rect = dial.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const x = (e.clientX || e.touches[0].clientX) - cx;
+      const y = (e.clientY || e.touches[0].clientY) - cy;
+      return Math.atan2(y, x) * (180 / Math.PI);
+    }
+
+    function onDialStart(e) {
+      e.preventDefault();
+      dialDragging = true;
+      dialLastAngle = getAngleFromEvent(e);
+    }
+
+    function onDialMove(e) {
+      if (!dialDragging) return;
+      e.preventDefault();
+      const angle = getAngleFromEvent(e);
+      let delta = angle - dialLastAngle;
+
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+
+      dialLastAngle = angle;
+      dialAngle += delta;
+      dialAccum += delta;
+
+      dial.style.transform = `rotate(${dialAngle}deg)`;
+
+      while (dialAccum >= CLICK_DEGREES) {
+        dialAccum -= CLICK_DEGREES;
+        adjustStartTime(-FIVE_MIN_MS);
+        playClick();
+        flashDial();
+      }
+      while (dialAccum <= -CLICK_DEGREES) {
+        dialAccum += CLICK_DEGREES;
+        adjustStartTime(FIVE_MIN_MS);
+        playClick();
+        flashDial();
+      }
+    }
+
+    function onDialEnd() {
+      dialDragging = false;
+      dialLastAngle = null;
+    }
+
+    function adjustStartTime(deltaMs) {
+      if (!activeStart) return;
+      const newStart = activeStart + deltaMs;
+      if (newStart >= Date.now()) return;
+      activeStart = newStart;
+      // Fire and forget — update backend
+      apiPut('/api/active', { start: newStart });
+      document.getElementById('startTime').textContent = `Started at ${formatTime(newStart)}`;
+      updateTimer();
+    }
+
+    // Mouse events
+    dial.addEventListener('mousedown', onDialStart);
+    window.addEventListener('mousemove', onDialMove);
+    window.addEventListener('mouseup', onDialEnd);
+
+    // Touch events
+    dial.addEventListener('touchstart', onDialStart, { passive: false });
+    window.addEventListener('touchmove', onDialMove, { passive: false });
+    window.addEventListener('touchend', onDialEnd);
+
+    // Scroll wheel on dial
+    dial.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const direction = e.deltaY > 0 ? 1 : -1;
+      dialAngle += direction * CLICK_DEGREES;
+      dial.style.transform = `rotate(${dialAngle}deg)`;
+      adjustStartTime(direction > 0 ? -FIVE_MIN_MS : FIVE_MIN_MS);
+      playClick();
+      flashDial();
+    }, { passive: false });
+
+    function showDial() { dialContainer.classList.add('visible'); }
+    function hideDial() { dialContainer.classList.remove('visible'); dialAngle = 0; dialAccum = 0; dial.style.transform = ''; }
+
+    // --- Init: restore state from backend ---
+    (async function init() {
+      const active = await apiGet('/api/active');
+      if (active) {
+        activeStart = active.start;
+        const btn = document.getElementById('toggleBtn');
+        const status = document.getElementById('status');
+        const startTimeEl = document.getElementById('startTime');
+
+        btn.textContent = 'Stop Fast';
+        btn.className = 'btn-stop';
+        status.textContent = 'Fasting';
+        status.className = 'status active';
+        startTimeEl.textContent = `Started at ${formatTime(active.start)}`;
+
+        showDial();
+        startTimer();
+      }
+      renderHistory();
+    })();
+  </script>
+</body>
+</html>
