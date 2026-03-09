@@ -1,0 +1,11 @@
+services:
+  app:
+    image: takecharge/takecharge:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - takecharge-data:/data
+    restart: unless-stopped
+
+volumes:
+  takecharge-data:
