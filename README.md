@@ -1,6 +1,6 @@
 # TakeCharge
 
-A simple fasting tracker with a Go + SQLite backend and a single-page frontend, packaged in one Docker container.
+A simple self hosted habit tracker with a Go + SQLite backend and a single-page frontend, packaged in one Docker container.
 
 ## Features
 
