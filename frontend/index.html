@@ -264,10 +264,10 @@
     }
 
     .dial {
-      width: 80px;
-      height: 80px;
+      width: 160px;
+      height: 160px;
       border-radius: 50%;
-      background: conic-gradient(from 0deg, #1e293b 0deg, #334155 30deg, #1e293b 60deg, #334155 90deg, #1e293b 120deg, #334155 150deg, #1e293b 180deg, #334155 210deg, #1e293b 240deg, #334155 270deg, #1e293b 300deg, #334155 330deg, #1e293b 360deg);
+      background: #1e293b;
       border: 3px solid #475569;
       position: relative;
       cursor: grab;
@@ -286,11 +286,11 @@
 
     .dial-indicator {
       position: absolute;
-      top: 6px;
+      top: 12px;
       left: 50%;
       transform: translateX(-50%);
-      width: 4px;
-      height: 14px;
+      width: 6px;
+      height: 24px;
       background: #4ade80;
       border-radius: 2px;
     }
@@ -555,16 +555,19 @@
     function playClick() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
+        const bufSize = Math.floor(ctx.sampleRate * 0.012);
+        const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.25));
+        }
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
         const gain = ctx.createGain();
-        osc.connect(gain);
+        gain.gain.value = 0.35;
+        source.connect(gain);
         gain.connect(ctx.destination);
-        osc.type = 'square';
-        osc.frequency.value = 1200;
-        gain.gain.value = 0.08;
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.04);
+        source.start();
       } catch (e) {}
     }
 
