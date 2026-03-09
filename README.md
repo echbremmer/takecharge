@@ -12,11 +12,17 @@ A simple fasting tracker with a Go + SQLite backend and a single-page frontend, 
 ## Quick Start
 
 ```bash
-docker build --network host -t takecharge .
-docker run -d --network host -v takecharge-data:/data takecharge
+docker compose up -d
 ```
 
 Open http://localhost:8080
+
+## Build from Source
+
+```bash
+docker build -t takecharge .
+docker run -d -p 8080:8080 -v takecharge-data:/data takecharge
+```
 
 ## API
 
