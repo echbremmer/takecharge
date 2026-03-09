@@ -1,4 +1,4 @@
-# Fasting Tracker
+# TakeCharge
 
 A simple fasting tracker with a Go + SQLite backend and a single-page frontend, packaged in one Docker container.
 
@@ -12,8 +12,8 @@ A simple fasting tracker with a Go + SQLite backend and a single-page frontend, 
 ## Quick Start
 
 ```bash
-docker build --network host -t fasting-tracker .
-docker run -d --network host -v fasting-data:/data fasting-tracker
+docker build --network host -t takecharge .
+docker run -d --network host -v takecharge-data:/data takecharge
 ```
 
 Open http://localhost:8080

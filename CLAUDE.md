@@ -1,4 +1,4 @@
-# Fasting Tracker
+# TakeCharge
 
 Dockerized Go + SQLite backend with a static HTML/JS frontend, all served from one container.
 
@@ -32,8 +32,8 @@ All timestamps are Unix milliseconds to match JS `Date.now()`.
 ## Build & Run
 
 ```bash
-docker build --network host -t fasting-tracker .
-docker run -d --network host -v fasting-data:/data fasting-tracker
+docker build --network host -t takecharge .
+docker run -d --network host -v takecharge-data:/data takecharge
 ```
 
 `--network host` is required because Docker bridge networking is disabled in `/etc/docker/daemon.json` (kernel 6.18 nftables incompatibility).

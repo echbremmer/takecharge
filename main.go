@@ -235,6 +235,6 @@ func main() {
 	// Static files
 	http.Handle("/", http.FileServer(http.Dir("frontend")))
 
-	fmt.Println("Fasting Tracker running on :8080")
+	fmt.Println("TakeCharge running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

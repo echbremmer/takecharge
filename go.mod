@@ -1,4 +1,4 @@
-module fasting-tracker
+module takecharge
 
 go 1.23
 
