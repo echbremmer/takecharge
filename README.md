@@ -11,6 +11,24 @@ A simple fasting tracker with a Go + SQLite backend and a single-page frontend, 
 
 ## Quick Start
 
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  app:
+    image: takecharge/takecharge:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - takecharge-data:/data
+    restart: unless-stopped
+
+volumes:
+  takecharge-data:
+```
+
+Then run:
+
 ```bash
 docker compose up -d
 ```
