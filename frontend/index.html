@@ -453,7 +453,7 @@
 
       if (activeStart) {
         // Stop fast — DELETE /api/active auto-creates a session
-        await apiDelete('/api/active');
+        await apiDelete('/api/habits/fasting/active');
         activeStart = null;
         clearInterval(timerInterval);
 
@@ -469,7 +469,7 @@
       } else {
         // Start fast
         const now = Date.now();
-        await apiPost('/api/active', { start: now });
+        await apiPost('/api/habits/fasting/active', { start: now });
         activeStart = now;
 
         btn.textContent = 'Stop Fast';
@@ -502,7 +502,7 @@
 
     // --- Delete session ---
     async function deleteSession(id) {
-      await apiDelete(`/api/sessions/${id}`);
+      await apiDelete(`/api/habits/fasting/sessions/${id}`);
       renderHistory();
     }
 
@@ -533,7 +533,7 @@
         alert('End time must be after start time.');
         return;
       }
-      const res = await apiPut(`/api/sessions/${id}`, { start: startMs, end: endMs });
+      const res = await apiPut(`/api/habits/fasting/sessions/${id}`, { start: startMs, end: endMs });
       if (!res) {
         alert('Failed to update session.');
         return;
@@ -582,7 +582,7 @@
 
     // --- Render history ---
     async function renderHistory() {
-      const sessions = await apiGet('/api/sessions') || [];
+      const sessions = await apiGet('/api/habits/fasting/sessions') || [];
       const el = document.getElementById('history');
 
       if (sessions.length === 0) {
@@ -754,7 +754,7 @@
       if (newStart >= Date.now()) return;
       activeStart = newStart;
       // Fire and forget — update backend
-      apiPut('/api/active', { start: newStart });
+      apiPut('/api/habits/fasting/active', { start: newStart });
       document.getElementById('startTime').textContent = `Started at ${formatTime(newStart)}`;
       updateTimer();
     }
@@ -785,7 +785,7 @@
 
     // --- Init: restore state from backend ---
     (async function init() {
-      const active = await apiGet('/api/active');
+      const active = await apiGet('/api/habits/fasting/active');
       if (active) {
         activeStart = active.start;
         const btn = document.getElementById('toggleBtn');

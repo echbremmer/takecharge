@@ -15,34 +15,51 @@ import (
 
 var db *sql.DB
 
-type Session struct {
-	ID       int64 `json:"id"`
-	StartMs  int64 `json:"start"`
-	EndMs    int64 `json:"end"`
-	Duration int64 `json:"duration"`
+type HabitType struct {
+	ID   int64  `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
 }
 
-type ActiveFast struct {
-	StartMs int64 `json:"start"`
+type Session struct {
+	ID          int64  `json:"id"`
+	HabitTypeID int64  `json:"habit_type_id"`
+	StartMs     int64  `json:"start"`
+	EndMs       int64  `json:"end"`
+	Duration    int64  `json:"duration"`
+}
+
+type ActiveSession struct {
+	HabitTypeID int64 `json:"habit_type_id"`
+	StartMs     int64 `json:"start"`
 }
 
 func initDB() {
 	var err error
-	db, err = sql.Open("sqlite3", "/data/fasting.db?_journal_mode=WAL")
+	db, err = sql.Open("sqlite3", "/data/takecharge.db?_journal_mode=WAL")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS sessions (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			start_ms INTEGER NOT NULL,
-			end_ms INTEGER NOT NULL,
-			duration_ms INTEGER NOT NULL
+		CREATE TABLE IF NOT EXISTS habit_types (
+			id   INTEGER PRIMARY KEY AUTOINCREMENT,
+			slug TEXT NOT NULL UNIQUE,
+			name TEXT NOT NULL
 		);
-		CREATE TABLE IF NOT EXISTS active_fast (
-			id INTEGER PRIMARY KEY CHECK(id=1),
-			start_ms INTEGER NOT NULL
+		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (1, 'fasting', 'Fasting');
+
+		CREATE TABLE IF NOT EXISTS sessions (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
+			start_ms      INTEGER NOT NULL,
+			end_ms        INTEGER NOT NULL,
+			duration_ms   INTEGER NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS active_sessions (
+			habit_type_id INTEGER PRIMARY KEY REFERENCES habit_types(id),
+			start_ms      INTEGER NOT NULL
 		);
 	`)
 	if err != nil {
@@ -56,20 +73,88 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func handleSessions(w http.ResponseWriter, r *http.Request) {
+func habitTypeID(slug string) (int64, error) {
+	var id int64
+	err := db.QueryRow("SELECT id FROM habit_types WHERE slug = ?", slug).Scan(&id)
+	return id, err
+}
+
+// GET /api/habits
+func handleHabits(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	rows, err := db.Query("SELECT id, slug, name FROM habit_types ORDER BY id")
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rows.Close()
+	habits := []HabitType{}
+	for rows.Next() {
+		var h HabitType
+		rows.Scan(&h.ID, &h.Slug, &h.Name)
+		habits = append(habits, h)
+	}
+	writeJSON(w, 200, habits)
+}
+
+// /api/habits/:habit/sessions and /api/habits/:habit/sessions/:id
+func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
+	// path after /api/habits/: "<slug>/sessions[/<id>]" or "<slug>/active"
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/habits/"), "/")
+	if len(parts) < 2 {
+		http.Error(w, "not found", 404)
+		return
+	}
+	slug, resource := parts[0], parts[1]
+	id := ""
+	if len(parts) > 2 {
+		id = parts[2]
+	}
+
+	switch resource {
+	case "sessions":
+		if id == "" {
+			handleHabitSessions(w, r, slug)
+		} else {
+			handleHabitSessionByID(w, r, slug, id)
+		}
+	case "active":
+		handleHabitActive(w, r, slug)
+	default:
+		http.Error(w, "not found", 404)
+	}
+}
+
+// GET, POST /api/habits/:habit/sessions
+func handleHabitSessions(w http.ResponseWriter, r *http.Request, slug string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
-		rows, err := db.Query("SELECT id, start_ms, end_ms, duration_ms FROM sessions ORDER BY start_ms DESC")
+		rows, err := db.Query(
+			"SELECT id, habit_type_id, start_ms, end_ms, duration_ms FROM sessions WHERE habit_type_id = ? ORDER BY start_ms DESC",
+			htID,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
 		defer rows.Close()
-
 		sessions := []Session{}
 		for rows.Next() {
 			var s Session
-			rows.Scan(&s.ID, &s.StartMs, &s.EndMs, &s.Duration)
+			rows.Scan(&s.ID, &s.HabitTypeID, &s.StartMs, &s.EndMs, &s.Duration)
 			sessions = append(sessions, s)
 		}
 		writeJSON(w, 200, sessions)
@@ -80,9 +165,12 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid json", 400)
 			return
 		}
+		s.HabitTypeID = htID
 		s.Duration = s.EndMs - s.StartMs
-		res, err := db.Exec("INSERT INTO sessions (start_ms, end_ms, duration_ms) VALUES (?, ?, ?)",
-			s.StartMs, s.EndMs, s.Duration)
+		res, err := db.Exec(
+			"INSERT INTO sessions (habit_type_id, start_ms, end_ms, duration_ms) VALUES (?, ?, ?, ?)",
+			s.HabitTypeID, s.StartMs, s.EndMs, s.Duration,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -95,10 +183,17 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleSessionByID(w http.ResponseWriter, r *http.Request) {
-	// Extract ID from /api/sessions/{id}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/sessions/"), "/")
-	id := parts[0]
+// PUT, DELETE /api/habits/:habit/sessions/:id
+func handleHabitSessionByID(w http.ResponseWriter, r *http.Request, slug, id string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 
 	switch r.Method {
 	case http.MethodPut:
@@ -110,8 +205,8 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		s.Duration = s.EndMs - s.StartMs
 		idInt, _ := strconv.ParseInt(id, 10, 64)
 		res, err := db.Exec(
-			"UPDATE sessions SET start_ms=?, end_ms=?, duration_ms=? WHERE id=?",
-			s.StartMs, s.EndMs, s.Duration, id,
+			"UPDATE sessions SET start_ms=?, end_ms=?, duration_ms=? WHERE id=? AND habit_type_id=?",
+			s.StartMs, s.EndMs, s.Duration, id, htID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -123,10 +218,11 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.ID = idInt
+		s.HabitTypeID = htID
 		writeJSON(w, 200, s)
 
 	case http.MethodDelete:
-		res, err := db.Exec("DELETE FROM sessions WHERE id = ?", id)
+		res, err := db.Exec("DELETE FROM sessions WHERE id=? AND habit_type_id=?", id, htID)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -143,57 +239,76 @@ func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleActive(w http.ResponseWriter, r *http.Request) {
+// GET, POST, PUT, DELETE /api/habits/:habit/active
+func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		var startMs int64
-		err := db.QueryRow("SELECT start_ms FROM active_fast WHERE id = 1").Scan(&startMs)
+		err := db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_type_id = ?", htID).Scan(&startMs)
 		if err == sql.ErrNoRows {
-			http.Error(w, "no active fast", 404)
+			http.Error(w, "no active session", 404)
 			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		writeJSON(w, 200, ActiveFast{StartMs: startMs})
+		writeJSON(w, 200, ActiveSession{HabitTypeID: htID, StartMs: startMs})
 
 	case http.MethodPost:
-		var a ActiveFast
+		var a ActiveSession
 		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 			http.Error(w, "invalid json", 400)
 			return
 		}
-		_, err := db.Exec("INSERT OR REPLACE INTO active_fast (id, start_ms) VALUES (1, ?)", a.StartMs)
+		_, err := db.Exec(
+			"INSERT OR REPLACE INTO active_sessions (habit_type_id, start_ms) VALUES (?, ?)",
+			htID, a.StartMs,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		a.HabitTypeID = htID
 		writeJSON(w, 201, a)
 
 	case http.MethodPut:
-		var a ActiveFast
+		var a ActiveSession
 		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 			http.Error(w, "invalid json", 400)
 			return
 		}
-		res, err := db.Exec("UPDATE active_fast SET start_ms = ? WHERE id = 1", a.StartMs)
+		res, err := db.Exec(
+			"UPDATE active_sessions SET start_ms=? WHERE habit_type_id=?",
+			a.StartMs, htID,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
 		n, _ := res.RowsAffected()
 		if n == 0 {
-			http.Error(w, "no active fast", 404)
+			http.Error(w, "no active session", 404)
 			return
 		}
+		a.HabitTypeID = htID
 		writeJSON(w, 200, a)
 
 	case http.MethodDelete:
 		var startMs int64
-		err := db.QueryRow("SELECT start_ms FROM active_fast WHERE id = 1").Scan(&startMs)
+		err := db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_type_id = ?", htID).Scan(&startMs)
 		if err == sql.ErrNoRows {
-			http.Error(w, "no active fast", 404)
+			http.Error(w, "no active session", 404)
 			return
 		}
 		if err != nil {
@@ -204,16 +319,18 @@ func handleActive(w http.ResponseWriter, r *http.Request) {
 		endMs := nowMs()
 		duration := endMs - startMs
 
-		_, err = db.Exec("INSERT INTO sessions (start_ms, end_ms, duration_ms) VALUES (?, ?, ?)",
-			startMs, endMs, duration)
+		_, err = db.Exec(
+			"INSERT INTO sessions (habit_type_id, start_ms, end_ms, duration_ms) VALUES (?, ?, ?, ?)",
+			htID, startMs, endMs, duration,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
 
-		db.Exec("DELETE FROM active_fast WHERE id = 1")
+		db.Exec("DELETE FROM active_sessions WHERE habit_type_id = ?", htID)
 
-		writeJSON(w, 200, Session{StartMs: startMs, EndMs: endMs, Duration: duration})
+		writeJSON(w, 200, Session{HabitTypeID: htID, StartMs: startMs, EndMs: endMs, Duration: duration})
 
 	default:
 		http.Error(w, "method not allowed", 405)
@@ -227,12 +344,9 @@ func nowMs() int64 {
 func main() {
 	initDB()
 
-	// API routes
-	http.HandleFunc("/api/sessions", handleSessions)
-	http.HandleFunc("/api/sessions/", handleSessionByID)
-	http.HandleFunc("/api/active", handleActive)
+	http.HandleFunc("/api/habits", handleHabits)
+	http.HandleFunc("/api/habits/", handleHabitRouter)
 
-	// Static files
 	http.Handle("/", http.FileServer(http.Dir("frontend")))
 
 	fmt.Println("TakeCharge running on :8080")
