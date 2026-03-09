@@ -16,7 +16,7 @@ Create a `docker-compose.yml`:
 ```yaml
 services:
   app:
-    image: takecharge/takecharge:latest
+    image: takecharge/takecharge:0.2.0
     ports:
       - "8080:8080"
     volumes:
@@ -46,13 +46,15 @@ docker run -d -p 8080:8080 -v takecharge-data:/data takecharge
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/sessions` | List all sessions (newest first) |
-| `POST` | `/api/sessions` | Create a session `{start, end}` |
-| `DELETE` | `/api/sessions/:id` | Delete a session |
-| `GET` | `/api/active` | Get active fast (404 if none) |
-| `POST` | `/api/active` | Start a fast `{start}` |
-| `PUT` | `/api/active` | Update start time `{start}` |
-| `DELETE` | `/api/active` | Stop fast (auto-creates session) |
+| `GET` | `/api/habits` | List all habit types |
+| `GET` | `/api/habits/:habit/sessions` | List sessions (newest first) |
+| `POST` | `/api/habits/:habit/sessions` | Create a session `{start, end}` |
+| `PUT` | `/api/habits/:habit/sessions/:id` | Edit a session |
+| `DELETE` | `/api/habits/:habit/sessions/:id` | Delete a session |
+| `GET` | `/api/habits/:habit/active` | Get active session (404 if none) |
+| `POST` | `/api/habits/:habit/active` | Start a session `{start}` |
+| `PUT` | `/api/habits/:habit/active` | Update start time `{start}` |
+| `DELETE` | `/api/habits/:habit/active` | Stop session (auto-creates session) |
 
 ## Stack
 
