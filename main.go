@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,27 +95,52 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleSessionDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
-
+func handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	// Extract ID from /api/sessions/{id}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/sessions/"), "/")
 	id := parts[0]
 
-	res, err := db.Exec("DELETE FROM sessions WHERE id = ?", id)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+	switch r.Method {
+	case http.MethodPut:
+		var s Session
+		if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		s.Duration = s.EndMs - s.StartMs
+		idInt, _ := strconv.ParseInt(id, 10, 64)
+		res, err := db.Exec(
+			"UPDATE sessions SET start_ms=?, end_ms=?, duration_ms=? WHERE id=?",
+			s.StartMs, s.EndMs, s.Duration, id,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			http.Error(w, "not found", 404)
+			return
+		}
+		s.ID = idInt
+		writeJSON(w, 200, s)
+
+	case http.MethodDelete:
+		res, err := db.Exec("DELETE FROM sessions WHERE id = ?", id)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			http.Error(w, "not found", 404)
+			return
+		}
+		w.WriteHeader(204)
+
+	default:
+		http.Error(w, "method not allowed", 405)
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		http.Error(w, "not found", 404)
-		return
-	}
-	w.WriteHeader(204)
 }
 
 func handleActive(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +229,7 @@ func main() {
 
 	// API routes
 	http.HandleFunc("/api/sessions", handleSessions)
-	http.HandleFunc("/api/sessions/", handleSessionDelete)
+	http.HandleFunc("/api/sessions/", handleSessionByID)
 	http.HandleFunc("/api/active", handleActive)
 
 	// Static files
