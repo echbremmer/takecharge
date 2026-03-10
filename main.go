@@ -34,6 +34,12 @@ type ActiveSession struct {
 	StartMs     int64 `json:"start"`
 }
 
+type ActivityDay struct {
+	ID          int64 `json:"id"`
+	HabitTypeID int64 `json:"habit_type_id"`
+	DayMs       int64 `json:"day_ms"`
+}
+
 func initDB() {
 	var err error
 	db, err = sql.Open("sqlite3", "/data/takecharge.db?_journal_mode=WAL")
@@ -48,6 +54,7 @@ func initDB() {
 			name TEXT NOT NULL
 		);
 		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (1, 'fasting', 'Fasting');
+		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (2, 'be-active', 'Be Active');
 
 		CREATE TABLE IF NOT EXISTS sessions (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,6 +67,13 @@ func initDB() {
 		CREATE TABLE IF NOT EXISTS active_sessions (
 			habit_type_id INTEGER PRIMARY KEY REFERENCES habit_types(id),
 			start_ms      INTEGER NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS activity_days (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
+			day_ms        INTEGER NOT NULL,
+			UNIQUE(habit_type_id, day_ms)
 		);
 	`)
 	if err != nil {
@@ -123,6 +137,12 @@ func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 		}
 	case "active":
 		handleHabitActive(w, r, slug)
+	case "days":
+		if id == "" {
+			handleHabitDays(w, r, slug)
+		} else {
+			handleHabitDayByID(w, r, slug, id)
+		}
 	default:
 		http.Error(w, "not found", 404)
 	}
@@ -335,6 +355,93 @@ func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string) {
 	default:
 		http.Error(w, "method not allowed", 405)
 	}
+}
+
+// GET, POST /api/habits/:habit/days
+func handleHabitDays(w http.ResponseWriter, r *http.Request, slug string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query(
+			"SELECT id, habit_type_id, day_ms FROM activity_days WHERE habit_type_id = ? ORDER BY day_ms DESC",
+			htID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer rows.Close()
+		days := []ActivityDay{}
+		for rows.Next() {
+			var d ActivityDay
+			rows.Scan(&d.ID, &d.HabitTypeID, &d.DayMs)
+			days = append(days, d)
+		}
+		writeJSON(w, 200, days)
+
+	case http.MethodPost:
+		var d ActivityDay
+		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		d.HabitTypeID = htID
+		res, err := db.Exec(
+			"INSERT OR IGNORE INTO activity_days (habit_type_id, day_ms) VALUES (?, ?)",
+			htID, d.DayMs,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		d.ID, _ = res.LastInsertId()
+		if d.ID == 0 {
+			db.QueryRow("SELECT id FROM activity_days WHERE habit_type_id=? AND day_ms=?", htID, d.DayMs).Scan(&d.ID)
+		}
+		writeJSON(w, 201, d)
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
+// DELETE /api/habits/:habit/days/:id
+func handleHabitDayByID(w http.ResponseWriter, r *http.Request, slug, id string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	res, err := db.Exec("DELETE FROM activity_days WHERE id=? AND habit_type_id=?", id, htID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		http.Error(w, "not found", 404)
+		return
+	}
+	w.WriteHeader(204)
 }
 
 func nowMs() int64 {

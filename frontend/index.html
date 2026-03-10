@@ -20,12 +20,47 @@
 
     h1 {
       font-size: 1.5rem;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
       color: #94a3b8;
       font-weight: 400;
       letter-spacing: 0.05em;
     }
 
+    /* Habit selector */
+    .habit-selector-container {
+      width: 100%;
+      max-width: 500px;
+      margin-bottom: 1.75rem;
+    }
+
+    .habit-select {
+      width: 100%;
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 0.65rem 2.5rem 0.65rem 1rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+    }
+
+    .habit-select:focus {
+      outline: none;
+      border-color: #4ade80;
+    }
+
+    /* Shared section wrapper */
+    .habit-section {
+      width: 100%;
+      max-width: 500px;
+    }
+
+    /* Fasting */
     .timer-section {
       text-align: center;
       margin-bottom: 2rem;
@@ -79,7 +114,6 @@
 
     .history {
       width: 100%;
-      max-width: 500px;
       margin-top: 2rem;
     }
 
@@ -353,34 +387,137 @@
       color: #475569;
       margin-top: 0.5rem;
     }
+
+    /* Be Active — circles */
+    .active-week-label {
+      text-align: center;
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 0.25rem;
+    }
+
+    .week-circles {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      max-width: 220px;
+      margin: 1.25rem auto 0;
+    }
+
+    .week-circles .day-circle:nth-child(7) {
+      grid-column: 2;
+    }
+
+    .day-circle {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .day-circle-ring {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2px solid #334155;
+      background: #1e293b;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .day-circle.done .day-circle-ring {
+      background: #4ade80;
+      border-color: #4ade80;
+    }
+
+    .day-circle-name {
+      font-size: 0.65rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .day-circle.done .day-circle-name {
+      color: #4ade80;
+    }
+
+    /* Past week circles in history */
+    .week-circles-history {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.6rem;
+      max-width: 180px;
+      margin: 0.75rem auto 0.5rem;
+    }
+
+    .week-circles-history .day-circle:nth-child(7) {
+      grid-column: 2;
+    }
+
+    .week-circles-history .day-circle-ring {
+      width: 40px;
+      height: 40px;
+    }
+
+    .week-circles-history .day-circle-name {
+      font-size: 0.55rem;
+    }
   </style>
 </head>
 <body>
   <h1>TAKECHARGE</h1>
 
-  <div class="timer-section">
-    <div class="status" id="status">Not fasting</div>
-    <div class="timer" id="timer">00:00:00</div>
-    <div class="start-time" id="startTime"></div>
-    <div class="dial-container" id="dialContainer">
-      <div class="dial-label">Adjust start time</div>
-      <div class="dial" id="dial">
-        <div class="dial-indicator" id="dialIndicator"></div>
-      </div>
-      <div class="dial-hint">Spin to move start back by 5 min per click</div>
-    </div>
-    <button class="btn-start" id="toggleBtn" onclick="toggle()">Start Fast</button>
+  <div class="habit-selector-container">
+    <select class="habit-select" id="habitSelect" onchange="switchHabit(this.value)">
+      <option value="fasting">Fasting</option>
+      <option value="be-active">Be Active</option>
+    </select>
   </div>
 
-  <div class="history">
-    <h2>History</h2>
-    <div id="history"></div>
+  <!-- Fasting section -->
+  <div id="fasting-section" class="habit-section">
+    <div class="timer-section">
+      <div class="status" id="status">Not fasting</div>
+      <div class="timer" id="timer">00:00:00</div>
+      <div class="start-time" id="startTime"></div>
+      <div class="dial-container" id="dialContainer">
+        <div class="dial-label">Adjust start time</div>
+        <div class="dial" id="dial">
+          <div class="dial-indicator" id="dialIndicator"></div>
+        </div>
+        <div class="dial-hint">Spin to move start back by 5 min per click</div>
+      </div>
+      <button class="btn-start" id="toggleBtn" onclick="toggle()">Start Fast</button>
+    </div>
+
+    <div class="history">
+      <h2>History</h2>
+      <div id="history"></div>
+    </div>
+  </div>
+
+  <!-- Be Active section -->
+  <div id="active-section" class="habit-section" style="display:none">
+    <div class="active-week-label">This Week</div>
+    <div id="active-current"></div>
+
+    <div class="history">
+      <h2>History</h2>
+      <div id="active-history"></div>
+    </div>
   </div>
 
   <script>
     let timerInterval = null;
-    let activeStart = null; // in-memory cache of active fast start time
-    let openWeekKey = null; // currently expanded week in history
+    let activeStart = null;
+    let openWeekKey = null;
+
+    // Be Active state
+    let activeDays = [];
+    let openActivityWeekKey = null;
+
+    const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     // --- API helpers ---
     async function apiGet(path) {
@@ -452,7 +589,6 @@
       const startTimeEl = document.getElementById('startTime');
 
       if (activeStart) {
-        // Stop fast — DELETE /api/active auto-creates a session
         await apiDelete('/api/habits/fasting/active');
         activeStart = null;
         clearInterval(timerInterval);
@@ -467,7 +603,6 @@
 
         renderHistory();
       } else {
-        // Start fast
         const now = Date.now();
         await apiPost('/api/habits/fasting/active', { start: now });
         activeStart = now;
@@ -580,7 +715,7 @@
       }
     }
 
-    // --- Render history ---
+    // --- Render fasting history ---
     async function renderHistory() {
       const sessions = await apiGet('/api/habits/fasting/sessions') || [];
       const el = document.getElementById('history');
@@ -753,23 +888,18 @@
       const newStart = activeStart + deltaMs;
       if (newStart >= Date.now()) return;
       activeStart = newStart;
-      // Fire and forget — update backend
       apiPut('/api/habits/fasting/active', { start: newStart });
       document.getElementById('startTime').textContent = `Started at ${formatTime(newStart)}`;
       updateTimer();
     }
 
-    // Mouse events
     dial.addEventListener('mousedown', onDialStart);
     window.addEventListener('mousemove', onDialMove);
     window.addEventListener('mouseup', onDialEnd);
-
-    // Touch events
     dial.addEventListener('touchstart', onDialStart, { passive: false });
     window.addEventListener('touchmove', onDialMove, { passive: false });
     window.addEventListener('touchend', onDialEnd);
 
-    // Scroll wheel on dial
     dial.addEventListener('wheel', (e) => {
       e.preventDefault();
       const direction = e.deltaY > 0 ? 1 : -1;
@@ -783,7 +913,141 @@
     function showDial() { dialContainer.classList.add('visible'); }
     function hideDial() { dialContainer.classList.remove('visible'); dialAngle = 0; dialAccum = 0; dial.style.transform = ''; }
 
-    // --- Init: restore state from backend ---
+    // --- Habit switcher ---
+    function switchHabit(habit) {
+      document.getElementById('fasting-section').style.display = habit === 'fasting' ? '' : 'none';
+      document.getElementById('active-section').style.display = habit === 'be-active' ? '' : 'none';
+    }
+
+    // --- Be Active ---
+    function getDayStart(ms) {
+      const d = new Date(ms);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+
+    function getCurrentWeekDays() {
+      const mon = getWeekMonday(Date.now());
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(mon);
+        d.setDate(mon.getDate() + i);
+        return d.getTime();
+      });
+    }
+
+    async function loadActivityDays() {
+      activeDays = await apiGet('/api/habits/be-active/days') || [];
+    }
+
+    function isDayActive(dayMs) {
+      return activeDays.some(d => d.day_ms === dayMs);
+    }
+
+    function getDayEntry(dayMs) {
+      return activeDays.find(d => d.day_ms === dayMs);
+    }
+
+    async function toggleActivityDay(dayMs) {
+      const entry = getDayEntry(dayMs);
+      if (entry) {
+        await apiDelete(`/api/habits/be-active/days/${entry.id}`);
+        activeDays = activeDays.filter(d => d.id !== entry.id);
+      } else {
+        const result = await apiPost('/api/habits/be-active/days', { day_ms: dayMs });
+        if (result) activeDays.push(result);
+      }
+      renderActivityCurrentWeek();
+      renderActivityHistory();
+    }
+
+    function buildCirclesHTML(weekDays, cssClass) {
+      return `<div class="${cssClass}">` +
+        weekDays.map((dayMs, i) => {
+          const done = isDayActive(dayMs) ? ' done' : '';
+          return `<div class="day-circle${done}" onclick="toggleActivityDay(${dayMs})">
+            <div class="day-circle-ring"></div>
+            <span class="day-circle-name">${DAY_NAMES[i]}</span>
+          </div>`;
+        }).join('') +
+        '</div>';
+    }
+
+    function renderActivityCurrentWeek() {
+      const days = getCurrentWeekDays();
+      document.getElementById('active-current').innerHTML = buildCirclesHTML(days, 'week-circles');
+    }
+
+    function toggleActivityWeek(key) {
+      if (openActivityWeekKey && openActivityWeekKey !== key) {
+        document.getElementById(`aweek-${openActivityWeekKey}`).style.display = 'none';
+        document.getElementById(`aweek-hdr-${openActivityWeekKey}`).querySelector('.week-chevron').classList.remove('open');
+      }
+      const sessionsEl = document.getElementById(`aweek-${key}`);
+      const chevronEl = document.getElementById(`aweek-hdr-${key}`).querySelector('.week-chevron');
+      if (openActivityWeekKey === key) {
+        sessionsEl.style.display = 'none';
+        chevronEl.classList.remove('open');
+        openActivityWeekKey = null;
+      } else {
+        sessionsEl.style.display = 'block';
+        chevronEl.classList.add('open');
+        openActivityWeekKey = key;
+      }
+    }
+
+    function renderActivityHistory() {
+      const currentKey = weekKey(getWeekMonday(Date.now()));
+
+      // Collect all weeks that have any active day, excluding current week
+      const weekSet = new Set();
+      for (const d of activeDays) {
+        const k = weekKey(getWeekMonday(d.day_ms));
+        if (k !== currentKey) weekSet.add(k);
+      }
+
+      // Also include any past week that has had days (even if all unchecked now we skip those)
+      const el = document.getElementById('active-history');
+
+      if (weekSet.size === 0) {
+        el.innerHTML = '<div class="no-history">No previous weeks yet.</div>';
+        return;
+      }
+
+      const sortedKeys = [...weekSet].sort((a, b) => b.localeCompare(a));
+
+      el.innerHTML = sortedKeys.map(key => {
+        const mon = new Date(key + 'T00:00:00');
+        const isOpen = key === openActivityWeekKey;
+        const label = weekRangeLabel(mon);
+
+        const weekDays = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(mon);
+          d.setDate(mon.getDate() + i);
+          return d.getTime();
+        });
+
+        const count = weekDays.filter(ms => isDayActive(ms)).length;
+        const summary = `${count} day${count !== 1 ? 's' : ''} active`;
+
+        const circlesHTML = buildCirclesHTML(weekDays, 'week-circles-history');
+
+        return `
+        <div class="week-group">
+          <div class="week-header" id="aweek-hdr-${key}" onclick="toggleActivityWeek('${key}')">
+            <span class="week-label">${label}</span>
+            <div style="display:flex;align-items:center;gap:0.6rem">
+              <span class="week-summary">${summary}</span>
+              <span class="week-chevron${isOpen ? ' open' : ''}">▾</span>
+            </div>
+          </div>
+          <div class="week-sessions" id="aweek-${key}" style="${isOpen ? '' : 'display:none'}">
+            ${circlesHTML}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // --- Init ---
     (async function init() {
       const active = await apiGet('/api/habits/fasting/active');
       if (active) {
@@ -802,6 +1066,10 @@
         startTimer();
       }
       renderHistory();
+
+      await loadActivityDays();
+      renderActivityCurrentWeek();
+      renderActivityHistory();
     })();
   </script>
 </body>
