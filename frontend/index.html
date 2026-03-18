@@ -388,6 +388,84 @@
       margin-top: 0.5rem;
     }
 
+    /* Week goal */
+    .week-goal-card {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .week-goal-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .week-goal-edit-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .goal-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+
+    .goal-value {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+
+    .goal-progress {
+      font-size: 0.8rem;
+      color: #4ade80;
+      margin-left: auto;
+    }
+
+    .goal-empty {
+      font-size: 0.85rem;
+      color: #475569;
+    }
+
+    .goal-unit {
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+
+    .goal-input {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.85rem;
+      width: 80px;
+    }
+
+    .goal-input:focus {
+      outline: none;
+      border-color: #4ade80;
+    }
+
+    /* Read-only goal row inside history collapsibles */
+    .week-goal-inline {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 0.75rem;
+      background: #0f172a;
+      border-radius: 6px;
+      margin: 0.35rem 0;
+    }
+
     /* Be Active — circles */
     .active-week-label {
       text-align: center;
@@ -491,6 +569,8 @@
       <button class="btn-start" id="toggleBtn" onclick="toggle()">Start Fast</button>
     </div>
 
+    <div id="fasting-goal"></div>
+
     <div class="history">
       <h2>History</h2>
       <div id="history"></div>
@@ -501,6 +581,7 @@
   <div id="active-section" class="habit-section" style="display:none">
     <div class="active-week-label">This Week</div>
     <div id="active-current"></div>
+    <div id="active-goal" style="margin-top:1.25rem"></div>
 
     <div class="history">
       <h2>History</h2>
@@ -516,6 +597,11 @@
     // Be Active state
     let activeDays = [];
     let openActivityWeekKey = null;
+
+    // Goals state
+    let fastingGoals = {};  // weekKey -> WeekGoal
+    let activeGoals = {};   // weekKey -> WeekGoal
+    let fastingSessions = []; // cached for fat-loss progress
 
     const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -601,7 +687,7 @@
         document.getElementById('timer').textContent = '00:00:00';
         hideDial();
 
-        renderHistory();
+        await renderHistory();
       } else {
         const now = Date.now();
         await apiPost('/api/habits/fasting/active', { start: now });
@@ -638,7 +724,7 @@
     // --- Delete session ---
     async function deleteSession(id) {
       await apiDelete(`/api/habits/fasting/sessions/${id}`);
-      renderHistory();
+      await renderHistory();
     }
 
     // --- Edit session ---
@@ -673,7 +759,7 @@
         alert('Failed to update session.');
         return;
       }
-      renderHistory();
+      await renderHistory();
     }
 
     // --- Week grouping helpers ---
@@ -715,19 +801,143 @@
       }
     }
 
+    // --- Goals ---
+    async function loadGoals() {
+      const fg = await apiGet('/api/habits/fasting/goals') || [];
+      fastingGoals = {};
+      for (const g of fg) fastingGoals[weekKey(getWeekMonday(g.week_start_ms))] = g;
+
+      const ag = await apiGet('/api/habits/be-active/goals') || [];
+      activeGoals = {};
+      for (const g of ag) activeGoals[weekKey(getWeekMonday(g.week_start_ms))] = g;
+    }
+
+    // --- Fasting goal (current week, editable) ---
+    function renderFastingGoal() {
+      const currentKey = weekKey(getWeekMonday(Date.now()));
+      const weekStartMs = getWeekMonday(Date.now()).getTime();
+      const goal = fastingGoals[currentKey];
+      const goalValue = goal ? goal.value : null;
+
+      const currentFat = estimateFatLoss(
+        fastingSessions
+          .filter(s => weekKey(getWeekMonday(s.start)) === currentKey)
+          .reduce((sum, s) => sum + s.duration, 0)
+      );
+
+      const progressHTML = goalValue !== null
+        ? `<span class="goal-value">${formatWeight(goalValue)}</span>
+           <span class="goal-progress">${formatWeight(currentFat)} so far</span>`
+        : `<span class="goal-empty">No goal set</span>`;
+
+      document.getElementById('fasting-goal').innerHTML = `
+        <div class="week-goal-card">
+          <div class="week-goal-row" id="fg-display">
+            <span class="goal-label">Weekly fat loss goal</span>
+            ${progressHTML}
+            <button class="edit-btn" onclick="editFastingGoal(${weekStartMs})" title="Edit goal">&#9998;</button>
+          </div>
+          <div class="week-goal-edit-row" id="fg-edit" style="display:none">
+            <span class="goal-label">Goal</span>
+            <input type="number" class="goal-input" id="fg-input" min="0" step="1"
+              value="${goalValue !== null ? goalValue : ''}" placeholder="grams">
+            <span class="goal-unit">g fat loss</span>
+            <button class="btn-save" onclick="submitFastingGoal(${weekStartMs})">Save</button>
+            <button class="btn-cancel" onclick="cancelFastingGoalEdit()">Cancel</button>
+          </div>
+        </div>`;
+    }
+
+    function editFastingGoal() {
+      document.getElementById('fg-display').style.display = 'none';
+      document.getElementById('fg-edit').style.display = 'flex';
+      document.getElementById('fg-input').focus();
+    }
+
+    function cancelFastingGoalEdit() {
+      document.getElementById('fg-display').style.display = 'flex';
+      document.getElementById('fg-edit').style.display = 'none';
+    }
+
+    async function submitFastingGoal(weekStartMs) {
+      const val = document.getElementById('fg-input').value;
+      if (val === '' || isNaN(val)) return;
+      const value = Math.max(0, parseFloat(val));
+      const result = await apiPost('/api/habits/fasting/goals', { week_start_ms: weekStartMs, value });
+      if (result) {
+        fastingGoals[weekKey(getWeekMonday(weekStartMs))] = result;
+        renderFastingGoal();
+      }
+    }
+
+    // --- Activity goal (current week, editable) ---
+    function renderActivityGoal() {
+      const currentKey = weekKey(getWeekMonday(Date.now()));
+      const weekStartMs = getWeekMonday(Date.now()).getTime();
+      const goal = activeGoals[currentKey];
+      const goalValue = goal ? goal.value : null;
+      const currentCount = getCurrentWeekDays().filter(ms => isDayActive(ms)).length;
+
+      const progressHTML = goalValue !== null
+        ? `<span class="goal-value">${goalValue} days</span>
+           <span class="goal-progress">${currentCount} / ${goalValue}</span>`
+        : `<span class="goal-empty">No goal set</span>`;
+
+      document.getElementById('active-goal').innerHTML = `
+        <div class="week-goal-card">
+          <div class="week-goal-row" id="ag-display">
+            <span class="goal-label">Weekly goal</span>
+            ${progressHTML}
+            <button class="edit-btn" onclick="editActivityGoal(${weekStartMs})" title="Edit goal">&#9998;</button>
+          </div>
+          <div class="week-goal-edit-row" id="ag-edit" style="display:none">
+            <span class="goal-label">Goal</span>
+            <input type="number" class="goal-input" id="ag-input" min="0" max="7" step="1"
+              value="${goalValue !== null ? goalValue : ''}" placeholder="0–7">
+            <span class="goal-unit">days</span>
+            <button class="btn-save" onclick="submitActivityGoal(${weekStartMs})">Save</button>
+            <button class="btn-cancel" onclick="cancelActivityGoalEdit()">Cancel</button>
+          </div>
+        </div>`;
+    }
+
+    function editActivityGoal() {
+      document.getElementById('ag-display').style.display = 'none';
+      document.getElementById('ag-edit').style.display = 'flex';
+      document.getElementById('ag-input').focus();
+    }
+
+    function cancelActivityGoalEdit() {
+      document.getElementById('ag-display').style.display = 'flex';
+      document.getElementById('ag-edit').style.display = 'none';
+    }
+
+    async function submitActivityGoal(weekStartMs) {
+      const val = document.getElementById('ag-input').value;
+      if (val === '' || isNaN(val)) return;
+      const value = Math.min(7, Math.max(0, parseInt(val)));
+      const result = await apiPost('/api/habits/be-active/goals', { week_start_ms: weekStartMs, value });
+      if (result) {
+        activeGoals[weekKey(getWeekMonday(weekStartMs))] = result;
+        renderActivityGoal();
+      }
+    }
+
     // --- Render fasting history ---
     async function renderHistory() {
-      const sessions = await apiGet('/api/habits/fasting/sessions') || [];
+      fastingSessions = await apiGet('/api/habits/fasting/sessions') || [];
+      renderFastingGoal(); // update progress with fresh session data
+
       const el = document.getElementById('history');
 
-      if (sessions.length === 0) {
+      if (fastingSessions.length === 0) {
         el.innerHTML = '<div class="no-history">No fasting sessions recorded yet.</div>';
         return;
       }
 
       const currentKey = weekKey(getWeekMonday(Date.now()));
       const weekMap = new Map();
-      for (const s of sessions) {
+      for (const s of fastingSessions) {
         const key = weekKey(getWeekMonday(s.start));
         if (!weekMap.has(key)) weekMap.set(key, { mon: getWeekMonday(s.start), sessions: [] });
         weekMap.get(key).sessions.push(s);
@@ -743,6 +953,16 @@
         const label = isCurrent ? 'This week' : weekRangeLabel(mon);
         const totalMs = ws.reduce((sum, s) => sum + s.duration, 0);
         const summary = `${ws.length} session${ws.length !== 1 ? 's' : ''} · ${formatDuration(totalMs)}`;
+
+        // Past week goal row (read-only; current week goal is in the separate #fasting-goal card)
+        const weekGoal = fastingGoals[key];
+        const totalFatGrams = estimateFatLoss(totalMs);
+        const pastGoalHTML = (!isCurrent && weekGoal) ? `
+          <div class="week-goal-inline">
+            <span class="goal-label">Fat loss goal</span>
+            <span class="goal-value">${formatWeight(weekGoal.value)}</span>
+            <span class="goal-progress" style="margin-left:auto">${formatWeight(totalFatGrams)} achieved</span>
+          </div>` : '';
 
         const cards = ws.map(s => {
           const water = estimateWaterLoss(s.duration);
@@ -793,7 +1013,7 @@
             </div>
           </div>
           <div class="week-sessions" id="week-${key}" style="${isOpen ? '' : 'display:none'}">
-            ${cards}
+            ${pastGoalHTML}${cards}
           </div>
         </div>`;
       }).join('');
@@ -957,6 +1177,7 @@
         if (result) activeDays.push(result);
       }
       renderActivityCurrentWeek();
+      renderActivityGoal();
       renderActivityHistory();
     }
 
@@ -998,14 +1219,16 @@
     function renderActivityHistory() {
       const currentKey = weekKey(getWeekMonday(Date.now()));
 
-      // Collect all weeks that have any active day, excluding current week
       const weekSet = new Set();
       for (const d of activeDays) {
         const k = weekKey(getWeekMonday(d.day_ms));
         if (k !== currentKey) weekSet.add(k);
       }
+      // Also include past weeks that had a goal but no logged days
+      for (const k of Object.keys(activeGoals)) {
+        if (k !== currentKey) weekSet.add(k);
+      }
 
-      // Also include any past week that has had days (even if all unchecked now we skip those)
       const el = document.getElementById('active-history');
 
       if (weekSet.size === 0) {
@@ -1029,6 +1252,14 @@
         const count = weekDays.filter(ms => isDayActive(ms)).length;
         const summary = `${count} day${count !== 1 ? 's' : ''} active`;
 
+        const weekGoal = activeGoals[key];
+        const pastGoalHTML = weekGoal ? `
+          <div class="week-goal-inline" style="max-width:180px;margin:0.5rem auto">
+            <span class="goal-label">Goal</span>
+            <span class="goal-value">${weekGoal.value} days</span>
+            <span class="goal-progress" style="margin-left:auto">${count} / ${weekGoal.value}</span>
+          </div>` : '';
+
         const circlesHTML = buildCirclesHTML(weekDays, 'week-circles-history');
 
         return `
@@ -1041,7 +1272,7 @@
             </div>
           </div>
           <div class="week-sessions" id="aweek-${key}" style="${isOpen ? '' : 'display:none'}">
-            ${circlesHTML}
+            ${circlesHTML}${pastGoalHTML}
           </div>
         </div>`;
       }).join('');
@@ -1049,7 +1280,12 @@
 
     // --- Init ---
     (async function init() {
-      const active = await apiGet('/api/habits/fasting/active');
+      const [active] = await Promise.all([
+        apiGet('/api/habits/fasting/active'),
+        loadGoals(),
+        loadActivityDays()
+      ]);
+
       if (active) {
         activeStart = active.start;
         const btn = document.getElementById('toggleBtn');
@@ -1065,10 +1301,11 @@
         showDial();
         startTimer();
       }
-      renderHistory();
 
-      await loadActivityDays();
+      await renderHistory(); // fetches sessions, caches them, calls renderFastingGoal()
+
       renderActivityCurrentWeek();
+      renderActivityGoal();
       renderActivityHistory();
     })();
   </script>
