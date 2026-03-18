@@ -40,6 +40,13 @@ type ActivityDay struct {
 	DayMs       int64 `json:"day_ms"`
 }
 
+type WeekGoal struct {
+	ID          int64   `json:"id"`
+	HabitTypeID int64   `json:"habit_type_id"`
+	WeekStartMs int64   `json:"week_start_ms"`
+	Value       float64 `json:"value"`
+}
+
 func initDB() {
 	var err error
 	db, err = sql.Open("sqlite3", "/data/takecharge.db?_journal_mode=WAL")
@@ -74,6 +81,14 @@ func initDB() {
 			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
 			day_ms        INTEGER NOT NULL,
 			UNIQUE(habit_type_id, day_ms)
+		);
+
+		CREATE TABLE IF NOT EXISTS week_goals (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
+			week_start_ms INTEGER NOT NULL,
+			value         REAL NOT NULL,
+			UNIQUE(habit_type_id, week_start_ms)
 		);
 	`)
 	if err != nil {
@@ -143,6 +158,8 @@ func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 		} else {
 			handleHabitDayByID(w, r, slug, id)
 		}
+	case "goals":
+		handleHabitGoals(w, r, slug)
 	default:
 		http.Error(w, "not found", 404)
 	}
@@ -442,6 +459,60 @@ func handleHabitDayByID(w http.ResponseWriter, r *http.Request, slug, id string)
 		return
 	}
 	w.WriteHeader(204)
+}
+
+// GET, POST /api/habits/:habit/goals
+func handleHabitGoals(w http.ResponseWriter, r *http.Request, slug string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query(
+			"SELECT id, habit_type_id, week_start_ms, value FROM week_goals WHERE habit_type_id = ? ORDER BY week_start_ms DESC",
+			htID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer rows.Close()
+		goals := []WeekGoal{}
+		for rows.Next() {
+			var g WeekGoal
+			rows.Scan(&g.ID, &g.HabitTypeID, &g.WeekStartMs, &g.Value)
+			goals = append(goals, g)
+		}
+		writeJSON(w, 200, goals)
+
+	case http.MethodPost:
+		var g WeekGoal
+		if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		g.HabitTypeID = htID
+		res, err := db.Exec(
+			"INSERT OR REPLACE INTO week_goals (habit_type_id, week_start_ms, value) VALUES (?, ?, ?)",
+			htID, g.WeekStartMs, g.Value,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		g.ID, _ = res.LastInsertId()
+		writeJSON(w, 201, g)
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
 }
 
 func nowMs() int64 {
