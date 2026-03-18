@@ -47,6 +47,15 @@ type WeekGoal struct {
 	Value       float64 `json:"value"`
 }
 
+type TodoItem struct {
+	ID          int64  `json:"id"`
+	HabitTypeID int64  `json:"habit_type_id"`
+	Text        string `json:"text"`
+	Checked     bool   `json:"checked"`
+	WeekStartMs int64  `json:"week_start_ms"`
+	CreatedMs   int64  `json:"created_ms"`
+}
+
 func initDB() {
 	var err error
 	db, err = sql.Open("sqlite3", "/data/takecharge.db?_journal_mode=WAL")
@@ -62,6 +71,7 @@ func initDB() {
 		);
 		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (1, 'fasting', 'Fasting');
 		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (2, 'be-active', 'Be Active');
+		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (3, 'things-to-do', 'Things to Do');
 
 		CREATE TABLE IF NOT EXISTS sessions (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,6 +99,15 @@ func initDB() {
 			week_start_ms INTEGER NOT NULL,
 			value         REAL NOT NULL,
 			UNIQUE(habit_type_id, week_start_ms)
+		);
+
+		CREATE TABLE IF NOT EXISTS todo_items (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
+			text          TEXT NOT NULL,
+			checked       INTEGER NOT NULL DEFAULT 0,
+			week_start_ms INTEGER NOT NULL,
+			created_ms    INTEGER NOT NULL
 		);
 	`)
 	if err != nil {
@@ -160,6 +179,12 @@ func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 		}
 	case "goals":
 		handleHabitGoals(w, r, slug)
+	case "todos":
+		if id == "" {
+			handleHabitTodos(w, r, slug)
+		} else {
+			handleHabitTodoByID(w, r, slug, id)
+		}
 	default:
 		http.Error(w, "not found", 404)
 	}
@@ -509,6 +534,128 @@ func handleHabitGoals(w http.ResponseWriter, r *http.Request, slug string) {
 		}
 		g.ID, _ = res.LastInsertId()
 		writeJSON(w, 201, g)
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
+// GET, POST /api/habits/:habit/todos
+func handleHabitTodos(w http.ResponseWriter, r *http.Request, slug string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query(
+			"SELECT id, habit_type_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE habit_type_id = ? ORDER BY created_ms ASC",
+			htID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer rows.Close()
+		items := []TodoItem{}
+		for rows.Next() {
+			var t TodoItem
+			var checked int
+			rows.Scan(&t.ID, &t.HabitTypeID, &t.Text, &checked, &t.WeekStartMs, &t.CreatedMs)
+			t.Checked = checked == 1
+			items = append(items, t)
+		}
+		writeJSON(w, 200, items)
+
+	case http.MethodPost:
+		var t TodoItem
+		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		t.HabitTypeID = htID
+		t.CreatedMs = nowMs()
+		res, err := db.Exec(
+			"INSERT INTO todo_items (habit_type_id, text, checked, week_start_ms, created_ms) VALUES (?, ?, 0, ?, ?)",
+			htID, t.Text, t.WeekStartMs, t.CreatedMs,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		t.ID, _ = res.LastInsertId()
+		t.Checked = false
+		writeJSON(w, 201, t)
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
+// PUT, DELETE /api/habits/:habit/todos/:id
+func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, slug, id string) {
+	htID, err := habitTypeID(slug)
+	if err == sql.ErrNoRows {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		var body struct {
+			Checked bool `json:"checked"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		checked := 0
+		if body.Checked {
+			checked = 1
+		}
+		res, err := db.Exec(
+			"UPDATE todo_items SET checked=? WHERE id=? AND habit_type_id=?",
+			checked, id, htID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			http.Error(w, "not found", 404)
+			return
+		}
+		var t TodoItem
+		var chk int
+		db.QueryRow(
+			"SELECT id, habit_type_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE id=?", id,
+		).Scan(&t.ID, &t.HabitTypeID, &t.Text, &chk, &t.WeekStartMs, &t.CreatedMs)
+		t.Checked = chk == 1
+		writeJSON(w, 200, t)
+
+	case http.MethodDelete:
+		res, err := db.Exec("DELETE FROM todo_items WHERE id=? AND habit_type_id=?", id, htID)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			http.Error(w, "not found", 404)
+			return
+		}
+		w.WriteHeader(204)
 
 	default:
 		http.Error(w, "method not allowed", 405)

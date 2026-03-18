@@ -537,6 +537,104 @@
     .week-circles-history .day-circle-name {
       font-size: 0.55rem;
     }
+
+    /* Things to Do */
+    .todo-add {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .todo-input {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      padding: 0.65rem 1rem;
+      font-size: 0.95rem;
+    }
+
+    .todo-input:focus {
+      outline: none;
+      border-color: #4ade80;
+    }
+
+    .todo-add-btn {
+      background: #4ade80;
+      color: #0f172a;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.1rem;
+      font-size: 1.3rem;
+      font-weight: 700;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .todo-add-btn:hover { opacity: 0.85; }
+
+    .todo-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .todo-item:hover { background: #243247; }
+
+    .todo-item.readonly {
+      cursor: default;
+    }
+
+    .todo-item.readonly:hover { background: #1e293b; }
+
+    .todo-checkbox {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #475569;
+      border-radius: 4px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #0f172a;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .todo-item.checked .todo-checkbox {
+      background: #4ade80;
+      border-color: #4ade80;
+    }
+
+    .todo-text {
+      flex: 1;
+      font-size: 0.95rem;
+    }
+
+    .todo-item.checked .todo-text {
+      text-decoration: line-through;
+      color: #64748b;
+    }
+
+    .todo-delete {
+      background: none;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 0.25rem 0.5rem;
+      line-height: 1;
+    }
+
+    .todo-delete:hover { color: #f87171; }
   </style>
 </head>
 <body>
@@ -544,13 +642,18 @@
 
   <div class="habit-selector-container">
     <select class="habit-select" id="habitSelect" onchange="switchHabit(this.value)">
+      <option value="summary">Summary</option>
       <option value="fasting">Fasting</option>
       <option value="be-active">Be Active</option>
+      <option value="things-to-do">Things to Do</option>
     </select>
   </div>
 
+  <!-- Summary section -->
+  <div id="summary-section" class="habit-section"></div>
+
   <!-- Fasting section -->
-  <div id="fasting-section" class="habit-section">
+  <div id="fasting-section" class="habit-section" style="display:none">
     <div class="timer-section">
       <div class="status" id="status">Not fasting</div>
       <div class="timer" id="timer">00:00:00</div>
@@ -573,6 +676,20 @@
     </div>
   </div>
 
+  <!-- Things to Do section -->
+  <div id="todo-section" class="habit-section" style="display:none">
+    <div class="todo-add">
+      <input type="text" class="todo-input" id="todo-new-text" placeholder="Add a new item…" onkeydown="todoInputKeydown(event)">
+      <button class="todo-add-btn" onclick="addTodo()">+</button>
+    </div>
+    <div id="todo-current"></div>
+
+    <div class="history">
+      <h2>History</h2>
+      <div id="todo-history"></div>
+    </div>
+  </div>
+
   <!-- Be Active section -->
   <div id="active-section" class="habit-section" style="display:none">
     <div class="active-week-label">This Week</div>
@@ -589,6 +706,10 @@
     let timerInterval = null;
     let activeStart = null;
     let openWeekKey = null;
+
+    // Things to Do state
+    let todoItems = [];
+    let openTodoWeekKey = null;
 
     // Be Active state
     let activeDays = [];
@@ -1131,8 +1252,139 @@
 
     // --- Habit switcher ---
     function switchHabit(habit) {
+      document.getElementById('summary-section').style.display = habit === 'summary' ? '' : 'none';
       document.getElementById('fasting-section').style.display = habit === 'fasting' ? '' : 'none';
       document.getElementById('active-section').style.display = habit === 'be-active' ? '' : 'none';
+      document.getElementById('todo-section').style.display = habit === 'things-to-do' ? '' : 'none';
+    }
+
+    // --- Things to Do ---
+    async function loadTodos() {
+      todoItems = await apiGet('/api/habits/things-to-do/todos') || [];
+    }
+
+    function getCurrentWeekTodos() {
+      const currentKey = weekKey(getWeekMonday(Date.now()));
+      return todoItems.filter(t => weekKey(getWeekMonday(t.week_start_ms)) === currentKey);
+    }
+
+    async function addTodo() {
+      const input = document.getElementById('todo-new-text');
+      const text = input.value.trim();
+      if (!text) return;
+      const weekStartMs = getWeekMonday(Date.now()).getTime();
+      const result = await apiPost('/api/habits/things-to-do/todos', { text, week_start_ms: weekStartMs });
+      if (result) {
+        todoItems.push(result);
+        input.value = '';
+        renderTodoCurrent();
+        renderTodoHistory();
+      }
+    }
+
+    function todoInputKeydown(e) {
+      if (e.key === 'Enter') addTodo();
+    }
+
+    async function toggleTodo(id) {
+      const item = todoItems.find(t => t.id === id);
+      if (!item) return;
+      const result = await apiPut(`/api/habits/things-to-do/todos/${id}`, { checked: !item.checked });
+      if (result) {
+        item.checked = result.checked;
+        renderTodoCurrent();
+        renderTodoHistory();
+      }
+    }
+
+    async function deleteTodo(id) {
+      await apiDelete(`/api/habits/things-to-do/todos/${id}`);
+      todoItems = todoItems.filter(t => t.id !== id);
+      renderTodoCurrent();
+      renderTodoHistory();
+    }
+
+    function buildTodoItemHTML(t, readonly = false) {
+      const checkedClass = t.checked ? ' checked' : '';
+      const readonlyClass = readonly ? ' readonly' : '';
+      const checkmark = t.checked ? '✓' : '';
+      const clickAttr = readonly ? '' : `onclick="toggleTodo(${t.id})"`;
+      const deleteBtn = readonly ? '' : `<button class="todo-delete" onclick="event.stopPropagation();deleteTodo(${t.id})" title="Delete">&times;</button>`;
+      return `
+        <div class="todo-item${checkedClass}${readonlyClass}" ${clickAttr}>
+          <div class="todo-checkbox">${checkmark}</div>
+          <span class="todo-text">${t.text}</span>
+          ${deleteBtn}
+        </div>`;
+    }
+
+    function renderTodoCurrent() {
+      const items = getCurrentWeekTodos();
+      const el = document.getElementById('todo-current');
+      if (items.length === 0) {
+        el.innerHTML = '<div class="no-history" style="padding:1rem 0">No items yet. Add one above.</div>';
+        return;
+      }
+      el.innerHTML = items.map(t => buildTodoItemHTML(t)).join('');
+    }
+
+    function toggleTodoWeek(key) {
+      if (openTodoWeekKey && openTodoWeekKey !== key) {
+        document.getElementById(`tweek-${openTodoWeekKey}`).style.display = 'none';
+        document.getElementById(`tweek-hdr-${openTodoWeekKey}`).querySelector('.week-chevron').classList.remove('open');
+      }
+      const el = document.getElementById(`tweek-${key}`);
+      const chevron = document.getElementById(`tweek-hdr-${key}`).querySelector('.week-chevron');
+      if (openTodoWeekKey === key) {
+        el.style.display = 'none';
+        chevron.classList.remove('open');
+        openTodoWeekKey = null;
+      } else {
+        el.style.display = 'block';
+        chevron.classList.add('open');
+        openTodoWeekKey = key;
+      }
+    }
+
+    function renderTodoHistory() {
+      const currentKey = weekKey(getWeekMonday(Date.now()));
+      const weekMap = new Map();
+      for (const t of todoItems) {
+        const k = weekKey(getWeekMonday(t.week_start_ms));
+        if (k === currentKey) continue;
+        if (!weekMap.has(k)) weekMap.set(k, { mon: getWeekMonday(t.week_start_ms), items: [] });
+        weekMap.get(k).items.push(t);
+      }
+
+      const el = document.getElementById('todo-history');
+      if (weekMap.size === 0) {
+        el.innerHTML = '<div class="no-history">No previous weeks yet.</div>';
+        return;
+      }
+
+      const sortedKeys = [...weekMap.keys()].sort((a, b) => b.localeCompare(a));
+
+      el.innerHTML = sortedKeys.map(key => {
+        const { mon, items } = weekMap.get(key);
+        const isOpen = key === openTodoWeekKey;
+        const label = weekRangeLabel(mon);
+        const checkedCount = items.filter(t => t.checked).length;
+        const summary = `${checkedCount} / ${items.length} done`;
+
+        return `
+        <div class="week-group">
+          <div class="week-header" id="tweek-hdr-${key}" onclick="toggleTodoWeek('${key}')">
+            <span class="week-label">${label}</span>
+            <div style="display:flex;align-items:center;gap:0.6rem">
+              <span class="week-summary">${summary}</span>
+              <span class="week-chevron${isOpen ? ' open' : ''}">▾</span>
+            </div>
+          </div>
+          <div class="week-sessions" id="tweek-${key}" style="${isOpen ? '' : 'display:none'}">
+            ${items.map(t => buildTodoItemHTML(t, true)).join('')}
+          </div>
+        </div>`;
+      }).join('');
     }
 
     // --- Be Active ---
@@ -1286,7 +1538,8 @@
       const [active] = await Promise.all([
         apiGet('/api/habits/fasting/active'),
         loadGoals(),
-        loadActivityDays()
+        loadActivityDays(),
+        loadTodos()
       ]);
 
       if (active) {
@@ -1310,6 +1563,9 @@
       renderActivityCurrentWeek();
       renderActivityGoal();
       renderActivityHistory();
+
+      renderTodoCurrent();
+      renderTodoHistory();
     })();
   </script>
 </body>
