@@ -522,20 +522,16 @@
 
     /* Past week circles in history */
     .week-circles-history {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.6rem;
-      max-width: 180px;
-      margin: 0.75rem auto 0.5rem;
-    }
-
-    .week-circles-history .day-circle:nth-child(7) {
-      grid-column: 2;
+      display: flex;
+      flex-direction: row;
+      gap: 0.5rem;
+      justify-content: center;
+      margin: 0.75rem 0 0.5rem;
     }
 
     .week-circles-history .day-circle-ring {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
     }
 
     .week-circles-history .day-circle-name {
@@ -1262,10 +1258,17 @@
 
         const circlesHTML = buildCirclesHTML(weekDays, 'week-circles-history');
 
+        const goalDot = weekGoal
+          ? `<span style="width:8px;height:8px;border-radius:50%;background:${count >= weekGoal.value ? '#008000' : '#E3963E'};flex-shrink:0"></span>`
+          : '';
+
         return `
         <div class="week-group">
           <div class="week-header" id="aweek-hdr-${key}" onclick="toggleActivityWeek('${key}')">
-            <span class="week-label">${label}</span>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              ${goalDot}
+              <span class="week-label">${label}</span>
+            </div>
             <div style="display:flex;align-items:center;gap:0.6rem">
               <span class="week-summary">${summary}</span>
               <span class="week-chevron${isOpen ? ' open' : ''}">▾</span>
