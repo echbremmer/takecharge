@@ -23,41 +23,50 @@ type User struct {
 	Username string `json:"username"`
 }
 
-type HabitType struct {
+type HabitStyle struct {
 	ID   int64  `json:"id"`
 	Slug string `json:"slug"`
 	Name string `json:"name"`
 }
 
+type Habit struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	StyleID   int64  `json:"style_id"`
+	StyleSlug string `json:"style_slug"`
+	Position  int    `json:"position"`
+	CreatedMs int64  `json:"created_ms"`
+}
+
 type Session struct {
-	ID          int64  `json:"id"`
-	HabitTypeID int64  `json:"habit_type_id"`
-	StartMs     int64  `json:"start"`
-	EndMs       int64  `json:"end"`
-	Duration    int64  `json:"duration"`
+	ID       int64 `json:"id"`
+	HabitID  int64 `json:"habit_id"`
+	StartMs  int64 `json:"start"`
+	EndMs    int64 `json:"end"`
+	Duration int64 `json:"duration"`
 }
 
 type ActiveSession struct {
-	HabitTypeID int64 `json:"habit_type_id"`
-	StartMs     int64 `json:"start"`
+	HabitID int64 `json:"habit_id"`
+	StartMs int64 `json:"start"`
 }
 
 type ActivityDay struct {
-	ID          int64 `json:"id"`
-	HabitTypeID int64 `json:"habit_type_id"`
-	DayMs       int64 `json:"day_ms"`
+	ID      int64 `json:"id"`
+	HabitID int64 `json:"habit_id"`
+	DayMs   int64 `json:"day_ms"`
 }
 
 type WeekGoal struct {
 	ID          int64   `json:"id"`
-	HabitTypeID int64   `json:"habit_type_id"`
+	HabitID     int64   `json:"habit_id"`
 	WeekStartMs int64   `json:"week_start_ms"`
 	Value       float64 `json:"value"`
 }
 
 type TodoItem struct {
 	ID          int64  `json:"id"`
-	HabitTypeID int64  `json:"habit_type_id"`
+	HabitID     int64  `json:"habit_id"`
 	Text        string `json:"text"`
 	Checked     bool   `json:"checked"`
 	WeekStartMs int64  `json:"week_start_ms"`
@@ -71,7 +80,6 @@ func initDB() {
 		log.Fatal(err)
 	}
 
-	// Core tables
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS users (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,45 +94,55 @@ func initDB() {
 			expires_ms INTEGER NOT NULL
 		);
 
-		CREATE TABLE IF NOT EXISTS habit_types (
-			id   INTEGER PRIMARY KEY AUTOINCREMENT,
+		CREATE TABLE IF NOT EXISTS habit_styles (
+			id   INTEGER PRIMARY KEY,
 			slug TEXT NOT NULL UNIQUE,
 			name TEXT NOT NULL
 		);
-		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (1, 'fasting', 'Fasting');
-		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (2, 'be-active', 'Be Active');
-		INSERT OR IGNORE INTO habit_types (id, slug, name) VALUES (3, 'things-to-do', 'Things to Do');
+		INSERT OR IGNORE INTO habit_styles VALUES (1, 'timer', 'Timer');
+		INSERT OR IGNORE INTO habit_styles VALUES (2, 'daily', 'Daily');
+		INSERT OR IGNORE INTO habit_styles VALUES (3, 'todo', 'Todo');
+
+		CREATE TABLE IF NOT EXISTS habits (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id    INTEGER NOT NULL REFERENCES users(id),
+			name       TEXT NOT NULL,
+			style_id   INTEGER NOT NULL REFERENCES habit_styles(id),
+			position   INTEGER NOT NULL DEFAULT 0,
+			created_ms INTEGER NOT NULL
+		);
 
 		CREATE TABLE IF NOT EXISTS sessions (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id       INTEGER NOT NULL DEFAULT 1,
-			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
-			start_ms      INTEGER NOT NULL,
-			end_ms        INTEGER NOT NULL,
-			duration_ms   INTEGER NOT NULL
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			habit_id    INTEGER NOT NULL REFERENCES habits(id),
+			start_ms    INTEGER NOT NULL,
+			end_ms      INTEGER NOT NULL,
+			duration_ms INTEGER NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS active_sessions (
+			habit_id INTEGER PRIMARY KEY REFERENCES habits(id),
+			start_ms INTEGER NOT NULL
 		);
 
 		CREATE TABLE IF NOT EXISTS activity_days (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id       INTEGER NOT NULL DEFAULT 1,
-			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
-			day_ms        INTEGER NOT NULL,
-			UNIQUE(user_id, habit_type_id, day_ms)
+			id       INTEGER PRIMARY KEY AUTOINCREMENT,
+			habit_id INTEGER NOT NULL REFERENCES habits(id),
+			day_ms   INTEGER NOT NULL,
+			UNIQUE(habit_id, day_ms)
 		);
 
 		CREATE TABLE IF NOT EXISTS week_goals (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id       INTEGER NOT NULL DEFAULT 1,
-			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
+			habit_id      INTEGER NOT NULL REFERENCES habits(id),
 			week_start_ms INTEGER NOT NULL,
 			value         REAL NOT NULL,
-			UNIQUE(user_id, habit_type_id, week_start_ms)
+			UNIQUE(habit_id, week_start_ms)
 		);
 
 		CREATE TABLE IF NOT EXISTS todo_items (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id       INTEGER NOT NULL DEFAULT 1,
-			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
+			habit_id      INTEGER NOT NULL REFERENCES habits(id),
 			text          TEXT NOT NULL,
 			checked       INTEGER NOT NULL DEFAULT 0,
 			week_start_ms INTEGER NOT NULL,
@@ -133,84 +151,6 @@ func initDB() {
 	`)
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	// Migration: add user_id to older table versions that lack it
-	runMigrations()
-}
-
-func runMigrations() {
-	hasCol := func(table, col string) bool {
-		var name string
-		db.QueryRow("SELECT name FROM pragma_table_info(?) WHERE name=?", table, col).Scan(&name)
-		return name == col
-	}
-
-	// sessions: just add column if missing
-	if !hasCol("sessions", "user_id") {
-		db.Exec("ALTER TABLE sessions ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1")
-	}
-
-	// todo_items: just add column if missing
-	if !hasCol("todo_items", "user_id") {
-		db.Exec("ALTER TABLE todo_items ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1")
-	}
-
-	// activity_days: recreate with new UNIQUE constraint if user_id missing
-	if !hasCol("activity_days", "user_id") {
-		db.Exec(`CREATE TABLE activity_days_new (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id       INTEGER NOT NULL DEFAULT 1,
-			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
-			day_ms        INTEGER NOT NULL,
-			UNIQUE(user_id, habit_type_id, day_ms)
-		)`)
-		db.Exec(`INSERT INTO activity_days_new (id, user_id, habit_type_id, day_ms)
-			SELECT id, 1, habit_type_id, day_ms FROM activity_days`)
-		db.Exec(`DROP TABLE activity_days`)
-		db.Exec(`ALTER TABLE activity_days_new RENAME TO activity_days`)
-	}
-
-	// week_goals: recreate with new UNIQUE constraint if user_id missing
-	if !hasCol("week_goals", "user_id") {
-		db.Exec(`CREATE TABLE week_goals_new (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id       INTEGER NOT NULL DEFAULT 1,
-			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
-			week_start_ms INTEGER NOT NULL,
-			value         REAL NOT NULL,
-			UNIQUE(user_id, habit_type_id, week_start_ms)
-		)`)
-		db.Exec(`INSERT INTO week_goals_new (id, user_id, habit_type_id, week_start_ms, value)
-			SELECT id, 1, habit_type_id, week_start_ms, value FROM week_goals`)
-		db.Exec(`DROP TABLE week_goals`)
-		db.Exec(`ALTER TABLE week_goals_new RENAME TO week_goals`)
-	}
-
-	// active_sessions: recreate with composite PK if user_id missing
-	if !hasCol("active_sessions", "user_id") {
-		db.Exec(`CREATE TABLE IF NOT EXISTS active_sessions (
-			user_id       INTEGER NOT NULL DEFAULT 1,
-			habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
-			start_ms      INTEGER NOT NULL,
-			PRIMARY KEY (user_id, habit_type_id)
-		)`)
-		// If old single-column PK table exists, migrate it
-		var oldTable string
-		db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='active_sessions_old'").Scan(&oldTable)
-		if oldTable == "" {
-			// rename old to old, create new, migrate
-			db.Exec(`ALTER TABLE active_sessions RENAME TO active_sessions_old`)
-			db.Exec(`CREATE TABLE active_sessions (
-				user_id       INTEGER NOT NULL DEFAULT 1,
-				habit_type_id INTEGER NOT NULL REFERENCES habit_types(id),
-				start_ms      INTEGER NOT NULL,
-				PRIMARY KEY (user_id, habit_type_id)
-			)`)
-			db.Exec(`INSERT OR IGNORE INTO active_sessions (user_id, habit_type_id, start_ms)
-				SELECT 1, habit_type_id, start_ms FROM active_sessions_old`)
-			db.Exec(`DROP TABLE active_sessions_old`)
-		}
 	}
 }
 
@@ -240,6 +180,13 @@ func getUserID(r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return userID, true
+}
+
+func createDefaultHabits(userID int64) {
+	now := nowMs()
+	db.Exec("INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, 'Fasting', 1, 0, ?)", userID, now)
+	db.Exec("INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, 'Be Active', 2, 1, ?)", userID, now)
+	db.Exec("INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, 'Things to Do', 3, 2, ?)", userID, now)
 }
 
 // --- Auth handlers ---
@@ -300,6 +247,7 @@ func handleAuthSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID, _ := res.LastInsertId()
+	createDefaultHabits(userID)
 	token := generateToken()
 	expires := nowMs() + 30*24*60*60*1000
 	db.Exec("INSERT INTO auth_sessions (token, user_id, expires_ms) VALUES (?, ?, ?)", token, userID, expires)
@@ -399,38 +347,121 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func habitTypeID(slug string) (int64, error) {
-	var id int64
-	err := db.QueryRow("SELECT id FROM habit_types WHERE slug = ?", slug).Scan(&id)
-	return id, err
+// --- Habit management ---
+
+// GET /api/habits, POST /api/habits
+func handleHabits(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query(`
+			SELECT h.id, h.name, h.style_id, hs.slug, h.position, h.created_ms
+			FROM habits h
+			JOIN habit_styles hs ON hs.id = h.style_id
+			WHERE h.user_id = ?
+			ORDER BY h.position, h.id`, userID)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer rows.Close()
+		habits := []Habit{}
+		for rows.Next() {
+			var h Habit
+			rows.Scan(&h.ID, &h.Name, &h.StyleID, &h.StyleSlug, &h.Position, &h.CreatedMs)
+			habits = append(habits, h)
+		}
+		writeJSON(w, 200, habits)
+
+	case http.MethodPost:
+		var body struct {
+			Name    string `json:"name"`
+			StyleID int64  `json:"style_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		body.Name = strings.TrimSpace(body.Name)
+		if body.Name == "" || body.StyleID == 0 {
+			http.Error(w, "name and style_id required", 400)
+			return
+		}
+		var styleSlug string
+		err := db.QueryRow("SELECT slug FROM habit_styles WHERE id = ?", body.StyleID).Scan(&styleSlug)
+		if err == sql.ErrNoRows {
+			http.Error(w, "invalid style_id", 400)
+			return
+		}
+		var maxPos int
+		db.QueryRow("SELECT COALESCE(MAX(position), -1) FROM habits WHERE user_id = ?", userID).Scan(&maxPos)
+		now := nowMs()
+		res, err := db.Exec(
+			"INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, ?, ?, ?, ?)",
+			userID, body.Name, body.StyleID, maxPos+1, now,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		id, _ := res.LastInsertId()
+		writeJSON(w, 201, Habit{
+			ID: id, Name: body.Name, StyleID: body.StyleID,
+			StyleSlug: styleSlug, Position: maxPos + 1, CreatedMs: now,
+		})
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
 }
 
-// GET /api/habits
-func handleHabits(w http.ResponseWriter, r *http.Request) {
+// GET /api/habits/styles
+func handleHabitStyles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	if _, ok := getUserID(r); !ok {
-		http.Error(w, "unauthorized", 401)
-		return
-	}
-	rows, err := db.Query("SELECT id, slug, name FROM habit_types ORDER BY id")
+	rows, err := db.Query("SELECT id, slug, name FROM habit_styles ORDER BY id")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	defer rows.Close()
-	habits := []HabitType{}
+	styles := []HabitStyle{}
 	for rows.Next() {
-		var h HabitType
-		rows.Scan(&h.ID, &h.Slug, &h.Name)
-		habits = append(habits, h)
+		var s HabitStyle
+		rows.Scan(&s.ID, &s.Slug, &s.Name)
+		styles = append(styles, s)
 	}
-	writeJSON(w, 200, habits)
+	writeJSON(w, 200, styles)
 }
 
-// /api/habits/:habit/...
+// DELETE /api/habits/:id (via handleHabitRouter)
+func handleHabitDelete(w http.ResponseWriter, r *http.Request, habitID int64, userID int64) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var exists int
+	db.QueryRow("SELECT 1 FROM habits WHERE id=? AND user_id=?", habitID, userID).Scan(&exists)
+	if exists == 0 {
+		http.Error(w, "not found", 404)
+		return
+	}
+	db.Exec("DELETE FROM sessions WHERE habit_id=?", habitID)
+	db.Exec("DELETE FROM active_sessions WHERE habit_id=?", habitID)
+	db.Exec("DELETE FROM activity_days WHERE habit_id=?", habitID)
+	db.Exec("DELETE FROM week_goals WHERE habit_id=?", habitID)
+	db.Exec("DELETE FROM todo_items WHERE habit_id=?", habitID)
+	db.Exec("DELETE FROM habits WHERE id=?", habitID)
+	w.WriteHeader(204)
+}
+
+// /api/habits/:id/...
 func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 	userID, ok := getUserID(r)
 	if !ok {
@@ -439,61 +470,71 @@ func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/habits/"), "/")
-	if len(parts) < 2 {
+
+	if parts[0] == "styles" {
+		handleHabitStyles(w, r)
+		return
+	}
+
+	habitID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
 		http.Error(w, "not found", 404)
 		return
 	}
-	slug, resource := parts[0], parts[1]
-	id := ""
+
+	if len(parts) == 1 {
+		handleHabitDelete(w, r, habitID, userID)
+		return
+	}
+
+	var exists int
+	db.QueryRow("SELECT 1 FROM habits WHERE id=? AND user_id=?", habitID, userID).Scan(&exists)
+	if exists == 0 {
+		http.Error(w, "habit not found", 404)
+		return
+	}
+
+	resource := parts[1]
+	subID := ""
 	if len(parts) > 2 {
-		id = parts[2]
+		subID = parts[2]
 	}
 
 	switch resource {
 	case "sessions":
-		if id == "" {
-			handleHabitSessions(w, r, slug, userID)
+		if subID == "" {
+			handleHabitSessions(w, r, habitID)
 		} else {
-			handleHabitSessionByID(w, r, slug, id, userID)
+			handleHabitSessionByID(w, r, habitID, subID)
 		}
 	case "active":
-		handleHabitActive(w, r, slug, userID)
+		handleHabitActive(w, r, habitID)
 	case "days":
-		if id == "" {
-			handleHabitDays(w, r, slug, userID)
+		if subID == "" {
+			handleHabitDays(w, r, habitID)
 		} else {
-			handleHabitDayByID(w, r, slug, id, userID)
+			handleHabitDayByID(w, r, habitID, subID)
 		}
 	case "goals":
-		handleHabitGoals(w, r, slug, userID)
+		handleHabitGoals(w, r, habitID)
 	case "todos":
-		if id == "" {
-			handleHabitTodos(w, r, slug, userID)
+		if subID == "" {
+			handleHabitTodos(w, r, habitID)
 		} else {
-			handleHabitTodoByID(w, r, slug, id, userID)
+			handleHabitTodoByID(w, r, habitID, subID)
 		}
 	default:
 		http.Error(w, "not found", 404)
 	}
 }
 
-// GET, POST /api/habits/:habit/sessions
-func handleHabitSessions(w http.ResponseWriter, r *http.Request, slug string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
+// GET, POST /api/habits/:id/sessions
+func handleHabitSessions(w http.ResponseWriter, r *http.Request, habitID int64) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := db.Query(
-			"SELECT id, habit_type_id, start_ms, end_ms, duration_ms FROM sessions WHERE habit_type_id = ? AND user_id = ? ORDER BY start_ms DESC",
-			htID, userID,
+			"SELECT id, habit_id, start_ms, end_ms, duration_ms FROM sessions WHERE habit_id = ? ORDER BY start_ms DESC",
+			habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -503,7 +544,7 @@ func handleHabitSessions(w http.ResponseWriter, r *http.Request, slug string, us
 		sessions := []Session{}
 		for rows.Next() {
 			var s Session
-			rows.Scan(&s.ID, &s.HabitTypeID, &s.StartMs, &s.EndMs, &s.Duration)
+			rows.Scan(&s.ID, &s.HabitID, &s.StartMs, &s.EndMs, &s.Duration)
 			sessions = append(sessions, s)
 		}
 		writeJSON(w, 200, sessions)
@@ -514,11 +555,11 @@ func handleHabitSessions(w http.ResponseWriter, r *http.Request, slug string, us
 			http.Error(w, "invalid json", 400)
 			return
 		}
-		s.HabitTypeID = htID
+		s.HabitID = habitID
 		s.Duration = s.EndMs - s.StartMs
 		res, err := db.Exec(
-			"INSERT INTO sessions (user_id, habit_type_id, start_ms, end_ms, duration_ms) VALUES (?, ?, ?, ?, ?)",
-			userID, s.HabitTypeID, s.StartMs, s.EndMs, s.Duration,
+			"INSERT INTO sessions (habit_id, start_ms, end_ms, duration_ms) VALUES (?, ?, ?, ?)",
+			habitID, s.StartMs, s.EndMs, s.Duration,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -532,18 +573,8 @@ func handleHabitSessions(w http.ResponseWriter, r *http.Request, slug string, us
 	}
 }
 
-// PUT, DELETE /api/habits/:habit/sessions/:id
-func handleHabitSessionByID(w http.ResponseWriter, r *http.Request, slug, id string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
+// PUT, DELETE /api/habits/:id/sessions/:sid
+func handleHabitSessionByID(w http.ResponseWriter, r *http.Request, habitID int64, id string) {
 	switch r.Method {
 	case http.MethodPut:
 		var s Session
@@ -554,8 +585,8 @@ func handleHabitSessionByID(w http.ResponseWriter, r *http.Request, slug, id str
 		s.Duration = s.EndMs - s.StartMs
 		idInt, _ := strconv.ParseInt(id, 10, 64)
 		res, err := db.Exec(
-			"UPDATE sessions SET start_ms=?, end_ms=?, duration_ms=? WHERE id=? AND habit_type_id=? AND user_id=?",
-			s.StartMs, s.EndMs, s.Duration, id, htID, userID,
+			"UPDATE sessions SET start_ms=?, end_ms=?, duration_ms=? WHERE id=? AND habit_id=?",
+			s.StartMs, s.EndMs, s.Duration, id, habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -567,11 +598,11 @@ func handleHabitSessionByID(w http.ResponseWriter, r *http.Request, slug, id str
 			return
 		}
 		s.ID = idInt
-		s.HabitTypeID = htID
+		s.HabitID = habitID
 		writeJSON(w, 200, s)
 
 	case http.MethodDelete:
-		res, err := db.Exec("DELETE FROM sessions WHERE id=? AND habit_type_id=? AND user_id=?", id, htID, userID)
+		res, err := db.Exec("DELETE FROM sessions WHERE id=? AND habit_id=?", id, habitID)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -588,22 +619,12 @@ func handleHabitSessionByID(w http.ResponseWriter, r *http.Request, slug, id str
 	}
 }
 
-// GET, POST, PUT, DELETE /api/habits/:habit/active
-func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
+// GET, POST, PUT, DELETE /api/habits/:id/active
+func handleHabitActive(w http.ResponseWriter, r *http.Request, habitID int64) {
 	switch r.Method {
 	case http.MethodGet:
 		var startMs int64
-		err := db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_type_id = ? AND user_id = ?", htID, userID).Scan(&startMs)
+		err := db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_id = ?", habitID).Scan(&startMs)
 		if err == sql.ErrNoRows {
 			http.Error(w, "no active session", 404)
 			return
@@ -612,7 +633,7 @@ func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string, user
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		writeJSON(w, 200, ActiveSession{HabitTypeID: htID, StartMs: startMs})
+		writeJSON(w, 200, ActiveSession{HabitID: habitID, StartMs: startMs})
 
 	case http.MethodPost:
 		var a ActiveSession
@@ -621,14 +642,14 @@ func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string, user
 			return
 		}
 		_, err := db.Exec(
-			"INSERT OR REPLACE INTO active_sessions (user_id, habit_type_id, start_ms) VALUES (?, ?, ?)",
-			userID, htID, a.StartMs,
+			"INSERT OR REPLACE INTO active_sessions (habit_id, start_ms) VALUES (?, ?)",
+			habitID, a.StartMs,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		a.HabitTypeID = htID
+		a.HabitID = habitID
 		writeJSON(w, 201, a)
 
 	case http.MethodPut:
@@ -638,8 +659,8 @@ func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string, user
 			return
 		}
 		res, err := db.Exec(
-			"UPDATE active_sessions SET start_ms=? WHERE habit_type_id=? AND user_id=?",
-			a.StartMs, htID, userID,
+			"UPDATE active_sessions SET start_ms=? WHERE habit_id=?",
+			a.StartMs, habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -650,12 +671,12 @@ func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string, user
 			http.Error(w, "no active session", 404)
 			return
 		}
-		a.HabitTypeID = htID
+		a.HabitID = habitID
 		writeJSON(w, 200, a)
 
 	case http.MethodDelete:
 		var startMs int64
-		err := db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_type_id = ? AND user_id = ?", htID, userID).Scan(&startMs)
+		err := db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_id = ?", habitID).Scan(&startMs)
 		if err == sql.ErrNoRows {
 			http.Error(w, "no active session", 404)
 			return
@@ -667,38 +688,28 @@ func handleHabitActive(w http.ResponseWriter, r *http.Request, slug string, user
 		endMs := nowMs()
 		duration := endMs - startMs
 		_, err = db.Exec(
-			"INSERT INTO sessions (user_id, habit_type_id, start_ms, end_ms, duration_ms) VALUES (?, ?, ?, ?, ?)",
-			userID, htID, startMs, endMs, duration,
+			"INSERT INTO sessions (habit_id, start_ms, end_ms, duration_ms) VALUES (?, ?, ?, ?)",
+			habitID, startMs, endMs, duration,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		db.Exec("DELETE FROM active_sessions WHERE habit_type_id = ? AND user_id = ?", htID, userID)
-		writeJSON(w, 200, Session{HabitTypeID: htID, StartMs: startMs, EndMs: endMs, Duration: duration})
+		db.Exec("DELETE FROM active_sessions WHERE habit_id = ?", habitID)
+		writeJSON(w, 200, Session{HabitID: habitID, StartMs: startMs, EndMs: endMs, Duration: duration})
 
 	default:
 		http.Error(w, "method not allowed", 405)
 	}
 }
 
-// GET, POST /api/habits/:habit/days
-func handleHabitDays(w http.ResponseWriter, r *http.Request, slug string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
+// GET, POST /api/habits/:id/days
+func handleHabitDays(w http.ResponseWriter, r *http.Request, habitID int64) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := db.Query(
-			"SELECT id, habit_type_id, day_ms FROM activity_days WHERE habit_type_id = ? AND user_id = ? ORDER BY day_ms DESC",
-			htID, userID,
+			"SELECT id, habit_id, day_ms FROM activity_days WHERE habit_id = ? ORDER BY day_ms DESC",
+			habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -708,7 +719,7 @@ func handleHabitDays(w http.ResponseWriter, r *http.Request, slug string, userID
 		days := []ActivityDay{}
 		for rows.Next() {
 			var d ActivityDay
-			rows.Scan(&d.ID, &d.HabitTypeID, &d.DayMs)
+			rows.Scan(&d.ID, &d.HabitID, &d.DayMs)
 			days = append(days, d)
 		}
 		writeJSON(w, 200, days)
@@ -719,10 +730,10 @@ func handleHabitDays(w http.ResponseWriter, r *http.Request, slug string, userID
 			http.Error(w, "invalid json", 400)
 			return
 		}
-		d.HabitTypeID = htID
+		d.HabitID = habitID
 		res, err := db.Exec(
-			"INSERT OR IGNORE INTO activity_days (user_id, habit_type_id, day_ms) VALUES (?, ?, ?)",
-			userID, htID, d.DayMs,
+			"INSERT OR IGNORE INTO activity_days (habit_id, day_ms) VALUES (?, ?)",
+			habitID, d.DayMs,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -730,7 +741,7 @@ func handleHabitDays(w http.ResponseWriter, r *http.Request, slug string, userID
 		}
 		d.ID, _ = res.LastInsertId()
 		if d.ID == 0 {
-			db.QueryRow("SELECT id FROM activity_days WHERE user_id=? AND habit_type_id=? AND day_ms=?", userID, htID, d.DayMs).Scan(&d.ID)
+			db.QueryRow("SELECT id FROM activity_days WHERE habit_id=? AND day_ms=?", habitID, d.DayMs).Scan(&d.ID)
 		}
 		writeJSON(w, 201, d)
 
@@ -739,22 +750,13 @@ func handleHabitDays(w http.ResponseWriter, r *http.Request, slug string, userID
 	}
 }
 
-// DELETE /api/habits/:habit/days/:id
-func handleHabitDayByID(w http.ResponseWriter, r *http.Request, slug, id string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
+// DELETE /api/habits/:id/days/:did
+func handleHabitDayByID(w http.ResponseWriter, r *http.Request, habitID int64, id string) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	res, err := db.Exec("DELETE FROM activity_days WHERE id=? AND habit_type_id=? AND user_id=?", id, htID, userID)
+	res, err := db.Exec("DELETE FROM activity_days WHERE id=? AND habit_id=?", id, habitID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -767,23 +769,13 @@ func handleHabitDayByID(w http.ResponseWriter, r *http.Request, slug, id string,
 	w.WriteHeader(204)
 }
 
-// GET, POST /api/habits/:habit/goals
-func handleHabitGoals(w http.ResponseWriter, r *http.Request, slug string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
+// GET, POST /api/habits/:id/goals
+func handleHabitGoals(w http.ResponseWriter, r *http.Request, habitID int64) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := db.Query(
-			"SELECT id, habit_type_id, week_start_ms, value FROM week_goals WHERE habit_type_id = ? AND user_id = ? ORDER BY week_start_ms DESC",
-			htID, userID,
+			"SELECT id, habit_id, week_start_ms, value FROM week_goals WHERE habit_id = ? ORDER BY week_start_ms DESC",
+			habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -793,7 +785,7 @@ func handleHabitGoals(w http.ResponseWriter, r *http.Request, slug string, userI
 		goals := []WeekGoal{}
 		for rows.Next() {
 			var g WeekGoal
-			rows.Scan(&g.ID, &g.HabitTypeID, &g.WeekStartMs, &g.Value)
+			rows.Scan(&g.ID, &g.HabitID, &g.WeekStartMs, &g.Value)
 			goals = append(goals, g)
 		}
 		writeJSON(w, 200, goals)
@@ -804,10 +796,10 @@ func handleHabitGoals(w http.ResponseWriter, r *http.Request, slug string, userI
 			http.Error(w, "invalid json", 400)
 			return
 		}
-		g.HabitTypeID = htID
+		g.HabitID = habitID
 		res, err := db.Exec(
-			"INSERT OR REPLACE INTO week_goals (user_id, habit_type_id, week_start_ms, value) VALUES (?, ?, ?, ?)",
-			userID, htID, g.WeekStartMs, g.Value,
+			"INSERT OR REPLACE INTO week_goals (habit_id, week_start_ms, value) VALUES (?, ?, ?)",
+			habitID, g.WeekStartMs, g.Value,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -821,23 +813,13 @@ func handleHabitGoals(w http.ResponseWriter, r *http.Request, slug string, userI
 	}
 }
 
-// GET, POST /api/habits/:habit/todos
-func handleHabitTodos(w http.ResponseWriter, r *http.Request, slug string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
+// GET, POST /api/habits/:id/todos
+func handleHabitTodos(w http.ResponseWriter, r *http.Request, habitID int64) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := db.Query(
-			"SELECT id, habit_type_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE habit_type_id = ? AND user_id = ? ORDER BY created_ms ASC",
-			htID, userID,
+			"SELECT id, habit_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE habit_id = ? ORDER BY created_ms ASC",
+			habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -848,7 +830,7 @@ func handleHabitTodos(w http.ResponseWriter, r *http.Request, slug string, userI
 		for rows.Next() {
 			var t TodoItem
 			var checked int
-			rows.Scan(&t.ID, &t.HabitTypeID, &t.Text, &checked, &t.WeekStartMs, &t.CreatedMs)
+			rows.Scan(&t.ID, &t.HabitID, &t.Text, &checked, &t.WeekStartMs, &t.CreatedMs)
 			t.Checked = checked == 1
 			items = append(items, t)
 		}
@@ -860,11 +842,11 @@ func handleHabitTodos(w http.ResponseWriter, r *http.Request, slug string, userI
 			http.Error(w, "invalid json", 400)
 			return
 		}
-		t.HabitTypeID = htID
+		t.HabitID = habitID
 		t.CreatedMs = nowMs()
 		res, err := db.Exec(
-			"INSERT INTO todo_items (user_id, habit_type_id, text, checked, week_start_ms, created_ms) VALUES (?, ?, ?, 0, ?, ?)",
-			userID, htID, t.Text, t.WeekStartMs, t.CreatedMs,
+			"INSERT INTO todo_items (habit_id, text, checked, week_start_ms, created_ms) VALUES (?, ?, 0, ?, ?)",
+			habitID, t.Text, t.WeekStartMs, t.CreatedMs,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -879,18 +861,8 @@ func handleHabitTodos(w http.ResponseWriter, r *http.Request, slug string, userI
 	}
 }
 
-// PUT, DELETE /api/habits/:habit/todos/:id
-func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, slug, id string, userID int64) {
-	htID, err := habitTypeID(slug)
-	if err == sql.ErrNoRows {
-		http.Error(w, "habit not found", 404)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
+// PUT, DELETE /api/habits/:id/todos/:tid
+func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, habitID int64, id string) {
 	switch r.Method {
 	case http.MethodPut:
 		var body struct {
@@ -905,8 +877,8 @@ func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, slug, id string
 			checked = 1
 		}
 		res, err := db.Exec(
-			"UPDATE todo_items SET checked=? WHERE id=? AND habit_type_id=? AND user_id=?",
-			checked, id, htID, userID,
+			"UPDATE todo_items SET checked=? WHERE id=? AND habit_id=?",
+			checked, id, habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -920,13 +892,13 @@ func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, slug, id string
 		var t TodoItem
 		var chk int
 		db.QueryRow(
-			"SELECT id, habit_type_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE id=?", id,
-		).Scan(&t.ID, &t.HabitTypeID, &t.Text, &chk, &t.WeekStartMs, &t.CreatedMs)
+			"SELECT id, habit_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE id=?", id,
+		).Scan(&t.ID, &t.HabitID, &t.Text, &chk, &t.WeekStartMs, &t.CreatedMs)
 		t.Checked = chk == 1
 		writeJSON(w, 200, t)
 
 	case http.MethodDelete:
-		res, err := db.Exec("DELETE FROM todo_items WHERE id=? AND habit_type_id=? AND user_id=?", id, htID, userID)
+		res, err := db.Exec("DELETE FROM todo_items WHERE id=? AND habit_id=?", id, habitID)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
