@@ -16,7 +16,7 @@ Create a `docker-compose.yml`:
 ```yaml
 services:
   app:
-    image: takecharge/takecharge:0.7.0
+    image: takecharge/takecharge:0.7.1
     ports:
       - "8080:8080"
     volumes:
