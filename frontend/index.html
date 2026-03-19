@@ -520,6 +520,7 @@
     let activeStart   = null;
     let openWeekKey   = null;
     let timerGoals    = {};
+    let drumState     = { d: 0, h: 0, m: 0 }; // selected indices for the goal drum picker
     let timerSessions = [];
 
     // Daily style state
@@ -992,14 +993,22 @@
       document.getElementById('tg-display').style.display = 'none';
       document.getElementById('tg-edit').style.display = 'block';
       const el = document.getElementById('timer-goal');
-      const initD = parseInt(el.dataset.initD);
-      const initH = parseInt(el.dataset.initH);
-      const initMIdx = parseInt(el.dataset.initM);
-      requestAnimationFrame(() => {
-        document.getElementById('drum-d').scrollTop = initD * 40;
-        document.getElementById('drum-h').scrollTop = initH * 40;
-        document.getElementById('drum-m').scrollTop = initMIdx * 40;
-      });
+      drumState.d = parseInt(el.dataset.initD);
+      drumState.h = parseInt(el.dataset.initH);
+      drumState.m = parseInt(el.dataset.initM);
+      // setTimeout lets the browser finish layout before we set scrollTop
+      setTimeout(() => {
+        const dd = document.getElementById('drum-d');
+        const dh = document.getElementById('drum-h');
+        const dm = document.getElementById('drum-m');
+        if (!dd) return;
+        dd.scrollTop = drumState.d * 40;
+        dh.scrollTop = drumState.h * 40;
+        dm.scrollTop = drumState.m * 40;
+        dd.addEventListener('scroll', () => { drumState.d = Math.round(dd.scrollTop / 40); }, { passive: true });
+        dh.addEventListener('scroll', () => { drumState.h = Math.round(dh.scrollTop / 40); }, { passive: true });
+        dm.addEventListener('scroll', () => { drumState.m = Math.round(dm.scrollTop / 40); }, { passive: true });
+      }, 50);
     }
     function cancelTimerGoalEdit() {
       document.getElementById('tg-display').style.display = 'flex';
@@ -1007,13 +1016,10 @@
     }
 
     async function submitTimerGoal(weekStartMs) {
-      const dIdx = Math.round(document.getElementById('drum-d').scrollTop / 40);
-      const hIdx = Math.round(document.getElementById('drum-h').scrollTop / 40);
-      const mIdx = Math.round(document.getElementById('drum-m').scrollTop / 40);
       const value = goalPartsToMs(
-        Math.min(dIdx, 7),
-        Math.min(hIdx, 23),
-        Math.min(mIdx, 11) * 5
+        Math.min(drumState.d, 7),
+        Math.min(drumState.h, 23),
+        Math.min(drumState.m, 11) * 5
       );
       if (value === 0) return;
       const result = await apiPost(`/api/habits/${currentHabit.id}/goals`, { week_start_ms: weekStartMs, value });
