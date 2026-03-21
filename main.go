@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -152,6 +153,10 @@ func initDB() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Migrations — ignore errors if column already exists
+	db.Exec("ALTER TABLE users ADD COLUMN profile_image BLOB")
+	db.Exec("ALTER TABLE users ADD COLUMN profile_image_type TEXT")
 }
 
 // --- Auth helpers ---
@@ -915,6 +920,62 @@ func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, habitID int64, 
 	}
 }
 
+// GET /api/profile/image  — returns the stored image or 404
+// POST /api/profile/image — accepts multipart "image" field, stores in DB
+func handleProfileImage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		var imgData []byte
+		var imgType sql.NullString
+		err := db.QueryRow("SELECT profile_image, profile_image_type FROM users WHERE id=?", userID).Scan(&imgData, &imgType)
+		if err != nil || len(imgData) == 0 {
+			http.Error(w, "not found", 404)
+			return
+		}
+		ct := "image/jpeg"
+		if imgType.Valid && imgType.String != "" {
+			ct = imgType.String
+		}
+		w.Header().Set("Content-Type", ct)
+		w.Write(imgData)
+
+	case http.MethodPost:
+		if err := r.ParseMultipartForm(5 << 20); err != nil {
+			http.Error(w, "image too large (max 5 MB)", 400)
+			return
+		}
+		file, header, err := r.FormFile("image")
+		if err != nil {
+			http.Error(w, "image field required", 400)
+			return
+		}
+		defer file.Close()
+		ct := header.Header.Get("Content-Type")
+		if ct == "" {
+			ct = "image/jpeg"
+		}
+		data, err := io.ReadAll(file)
+		if err != nil {
+			http.Error(w, "read error", 500)
+			return
+		}
+		_, err = db.Exec("UPDATE users SET profile_image=?, profile_image_type=? WHERE id=?", data, ct, userID)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.WriteHeader(204)
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
 func nowMs() int64 {
 	return time.Now().UnixMilli()
 }
@@ -923,6 +984,7 @@ func main() {
 	initDB()
 
 	http.HandleFunc("/api/auth/", handleAuthRouter)
+	http.HandleFunc("/api/profile/image", handleProfileImage)
 	http.HandleFunc("/api/habits", handleHabits)
 	http.HandleFunc("/api/habits/", handleHabitRouter)
 
