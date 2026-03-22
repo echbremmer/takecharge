@@ -687,10 +687,7 @@
 
   <!-- Summary section -->
   <div id="summary-section" class="habit-section">
-    <div class="summary-header">
-      <span class="summary-user" id="summary-username"></span>
-      <button class="btn-logout" onclick="logout()">Logout</button>
-    </div>
+    <div class="summary-header"></div>
     <div class="dashboard-cards" id="dashboard-cards"></div>
   </div>
 
@@ -791,6 +788,7 @@
       <input type="file" id="profile-img-input" accept="image/*" style="display:none" onchange="uploadProfileImage(this)">
       <p class="profile-page-username" id="profile-page-username"></p>
       <p class="profile-page-hint">Tap photo to change</p>
+      <button class="btn-logout" onclick="logout()" style="margin-top:2rem">Logout</button>
     </div>
   </div>
 
@@ -900,7 +898,6 @@
       document.getElementById('login-page').style.display = 'none';
       document.getElementById('main-app').style.display = '';
       document.getElementById('bottom-nav').style.display = 'flex';
-      document.getElementById('summary-username').textContent = user.username;
     }
 
     function setActiveNav(name) {
