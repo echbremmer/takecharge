@@ -28,8 +28,7 @@ dependencies:
   # Image picker (profile photo)
   image_picker: ^1.1.2
 
-  # Secure storage (optional, for refresh tokens later)
-  flutter_secure_storage: ^9.0.0
+  # flutter_secure_storage: ^9.0.0  # Not needed — cookie auth only
 
 dev_dependencies:
   flutter_test:
