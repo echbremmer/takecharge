@@ -82,6 +82,7 @@ type DailyTarget struct {
 	TargetValue float64 `json:"target_value"`
 	Step        float64 `json:"step"`
 	Position    int     `json:"position"`
+	Mode        string  `json:"mode"` // "target" or "limit"
 }
 
 type DailyLog struct {
@@ -174,7 +175,8 @@ func initDB() {
 			unit         TEXT NOT NULL DEFAULT '',
 			target_value REAL NOT NULL DEFAULT 1,
 			step         REAL NOT NULL DEFAULT 1,
-			position     INTEGER NOT NULL DEFAULT 0
+			position     INTEGER NOT NULL DEFAULT 0,
+			mode         TEXT NOT NULL DEFAULT 'target'
 		);
 
 		CREATE TABLE IF NOT EXISTS daily_logs (
@@ -192,6 +194,7 @@ func initDB() {
 	// Migrations — ignore errors if column already exists
 	db.Exec("ALTER TABLE users ADD COLUMN profile_image BLOB")
 	db.Exec("ALTER TABLE users ADD COLUMN profile_image_type TEXT")
+	db.Exec("ALTER TABLE daily_targets ADD COLUMN mode TEXT NOT NULL DEFAULT 'target'")
 }
 
 // --- Auth helpers ---
@@ -970,7 +973,7 @@ func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := db.Query(
-			"SELECT id, habit_id, name, unit, target_value, step, position FROM daily_targets WHERE habit_id=? ORDER BY position, id",
+			"SELECT id, habit_id, name, unit, target_value, step, position, mode FROM daily_targets WHERE habit_id=? ORDER BY position, id",
 			habitID,
 		)
 		if err != nil {
@@ -981,7 +984,7 @@ func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
 		targets := []DailyTarget{}
 		for rows.Next() {
 			var t DailyTarget
-			rows.Scan(&t.ID, &t.HabitID, &t.Name, &t.Unit, &t.TargetValue, &t.Step, &t.Position)
+			rows.Scan(&t.ID, &t.HabitID, &t.Name, &t.Unit, &t.TargetValue, &t.Step, &t.Position, &t.Mode)
 			targets = append(targets, t)
 		}
 		writeJSON(w, 200, targets)
@@ -992,12 +995,16 @@ func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
 			Unit        string  `json:"unit"`
 			TargetValue float64 `json:"target_value"`
 			Step        float64 `json:"step"`
+			Mode        string  `json:"mode"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid json", 400)
 			return
 		}
 		body.Name = strings.TrimSpace(body.Name)
+		if body.Mode != "limit" {
+			body.Mode = "target"
+		}
 		if body.Name == "" || body.TargetValue <= 0 || body.Step <= 0 {
 			http.Error(w, "name, target_value and step are required and must be > 0", 400)
 			return
@@ -1005,8 +1012,8 @@ func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
 		var maxPos int
 		db.QueryRow("SELECT COALESCE(MAX(position), -1) FROM daily_targets WHERE habit_id=?", habitID).Scan(&maxPos)
 		res, err := db.Exec(
-			"INSERT INTO daily_targets (habit_id, name, unit, target_value, step, position) VALUES (?, ?, ?, ?, ?, ?)",
-			habitID, body.Name, body.Unit, body.TargetValue, body.Step, maxPos+1,
+			"INSERT INTO daily_targets (habit_id, name, unit, target_value, step, position, mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			habitID, body.Name, body.Unit, body.TargetValue, body.Step, maxPos+1, body.Mode,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -1015,7 +1022,7 @@ func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
 		id, _ := res.LastInsertId()
 		writeJSON(w, 201, DailyTarget{
 			ID: id, HabitID: habitID, Name: body.Name, Unit: body.Unit,
-			TargetValue: body.TargetValue, Step: body.Step, Position: maxPos + 1,
+			TargetValue: body.TargetValue, Step: body.Step, Position: maxPos + 1, Mode: body.Mode,
 		})
 
 	default:
@@ -1032,19 +1039,23 @@ func handleDailyTargetByID(w http.ResponseWriter, r *http.Request, habitID int64
 			Unit        string  `json:"unit"`
 			TargetValue float64 `json:"target_value"`
 			Step        float64 `json:"step"`
+			Mode        string  `json:"mode"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid json", 400)
 			return
 		}
 		body.Name = strings.TrimSpace(body.Name)
+		if body.Mode != "limit" {
+			body.Mode = "target"
+		}
 		if body.Name == "" || body.TargetValue <= 0 || body.Step <= 0 {
 			http.Error(w, "name, target_value and step are required and must be > 0", 400)
 			return
 		}
 		res, err := db.Exec(
-			"UPDATE daily_targets SET name=?, unit=?, target_value=?, step=? WHERE id=? AND habit_id=?",
-			body.Name, body.Unit, body.TargetValue, body.Step, id, habitID,
+			"UPDATE daily_targets SET name=?, unit=?, target_value=?, step=?, mode=? WHERE id=? AND habit_id=?",
+			body.Name, body.Unit, body.TargetValue, body.Step, body.Mode, id, habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -1060,7 +1071,7 @@ func handleDailyTargetByID(w http.ResponseWriter, r *http.Request, habitID int64
 		db.QueryRow("SELECT position FROM daily_targets WHERE id=?", id).Scan(&pos)
 		writeJSON(w, 200, DailyTarget{
 			ID: idInt, HabitID: habitID, Name: body.Name, Unit: body.Unit,
-			TargetValue: body.TargetValue, Step: body.Step, Position: pos,
+			TargetValue: body.TargetValue, Step: body.Step, Position: pos, Mode: body.Mode,
 		})
 
 	case http.MethodDelete:
