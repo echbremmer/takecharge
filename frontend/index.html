@@ -231,6 +231,9 @@
     .goal-label { font-size: 0.65rem; color: var(--on-surface-muted); text-transform: uppercase; letter-spacing: 0.08em; flex-shrink: 0; }
     .goal-value { font-family: 'Manrope', sans-serif; font-size: 0.9rem; font-weight: 700; color: var(--on-surface); }
     .goal-progress { font-size: 0.8rem; color: var(--primary); margin-left: auto; font-weight: 500; }
+    .goal-left { font-size: 0.8rem; font-weight: 600; }
+    .goal-left.remaining { color: var(--on-surface-muted); }
+    .goal-left.reached { color: var(--primary); }
     .goal-empty { font-size: 0.85rem; color: var(--on-surface-muted); }
     .goal-unit { font-size: 0.85rem; color: var(--on-surface-muted); }
 
@@ -339,12 +342,6 @@
     .add-target-btn:hover { opacity: 0.88; }
     .add-target-error { font-size: 0.8rem; color: #8b4a47; margin-top: 0.5rem; min-height: 1em; }
 
-    /* Day circle partial state */
-    .day-circle.partial .day-circle-ring {
-      background: linear-gradient(135deg, #E3963E, #f0b96a);
-      box-shadow: 0 4px 16px 0 rgba(227, 150, 62, 0.25);
-    }
-    .day-circle.partial .day-circle-name { color: #c47d2a; }
 
     /* Daily style — circles */
     .active-week-label { text-align: center; font-size: 0.85rem; color: var(--on-surface-muted); margin-bottom: 0.25rem; }
@@ -355,17 +352,7 @@
     }
     .week-circles .day-circle:nth-child(7) { grid-column: 2; }
 
-    .day-circle { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; cursor: pointer; user-select: none; }
-
-    .day-circle-ring {
-      width: 56px; height: 56px; border-radius: 50%;
-      background: var(--surface-nest); box-shadow: var(--shadow);
-      transition: background var(--transition), box-shadow var(--transition);
-    }
-    .day-circle.done .day-circle-ring {
-      background: linear-gradient(135deg, var(--primary), var(--primary-container));
-      box-shadow: 0 4px 16px 0 rgba(85, 98, 77, 0.32);
-    }
+    .day-circle { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; user-select: none; }
 
     .day-circle-name { font-size: 0.65rem; color: var(--on-surface-muted); text-transform: uppercase; letter-spacing: 0.08em; }
     .day-circle.done .day-circle-name { color: var(--primary); }
@@ -374,7 +361,7 @@
       display: flex; flex-direction: row; gap: 0.5rem;
       justify-content: center; margin: 0.75rem 0 0.5rem;
     }
-    .week-circles-history .day-circle-ring { width: 36px; height: 36px; }
+    .week-circles-history .day-circle-name { font-size: 0.55rem; }
     .week-circles-history .day-circle-name { font-size: 0.55rem; }
 
     /* Todo style */
@@ -485,6 +472,31 @@
     .settings-error { font-size: 0.85rem; color: #8b4a47; margin-top: 0.5rem; min-height: 1.2em; }
 
     /* Auth */
+    /* Dashboard */
+    .dashboard-cards { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem; }
+    .dash-card {
+      background: var(--surface-card); border-radius: var(--radius-xl);
+      padding: 1rem 1.25rem; box-shadow: var(--shadow);
+      cursor: pointer; transition: box-shadow var(--transition), transform var(--transition);
+      text-align: left; border: none; width: 100%;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .dash-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+    .dash-card-title { font-family: 'Manrope', sans-serif; font-size: 1rem; font-weight: 700; color: var(--on-surface); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+    .dash-active-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .dash-timer-row { display: flex; justify-content: space-between; align-items: baseline; }
+    .dash-timer-active { font-size: 1.4rem; font-family: 'Manrope', sans-serif; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; }
+    .dash-timer-total { font-size: 0.8rem; color: var(--on-surface-muted); }
+    .dash-timer-week-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--on-surface-muted); margin-top: 0.25rem; }
+    .dash-week-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 2px; }
+    .dash-day-cell { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; flex: 1; }
+    .dash-day-name { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--on-surface-muted); }
+    .dash-todo-list { display: flex; flex-direction: column; gap: 0.3rem; }
+    .dash-todo-item { font-size: 0.85rem; color: var(--on-surface-var); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dash-todo-more { font-size: 0.75rem; color: var(--on-surface-muted); margin-top: 0.2rem; }
+    .dash-empty { font-size: 0.85rem; color: var(--on-surface-muted); }
+
     /* Profile page */
     .profile-page { display: flex; flex-direction: column; align-items: center; padding-top: 2rem; }
     .profile-avatar-wrap {
@@ -678,10 +690,8 @@
 
   <!-- Summary section -->
   <div id="summary-section" class="habit-section">
-    <div class="summary-header">
-      <span class="summary-user" id="summary-username"></span>
-      <button class="btn-logout" onclick="logout()">Logout</button>
-    </div>
+    <div class="summary-header"></div>
+    <div class="dashboard-cards" id="dashboard-cards"></div>
   </div>
 
   <!-- Timer style section -->
@@ -718,7 +728,7 @@
     <div class="daily-manage">
       <p class="daily-manage-title">Targets</p>
       <div id="daily-targets-manage"></div>
-      <div class="add-target-card">
+      <div class="add-target-card" id="add-target-card">
         <h3>Add a target</h3>
         <div class="add-target-grid">
           <input class="full-width" id="target-name" placeholder="Name (e.g. Water)">
@@ -781,6 +791,7 @@
       <input type="file" id="profile-img-input" accept="image/*" style="display:none" onchange="uploadProfileImage(this)">
       <p class="profile-page-username" id="profile-page-username"></p>
       <p class="profile-page-hint">Tap photo to change</p>
+      <button class="btn-logout" onclick="logout()" style="margin-top:2rem">Logout</button>
     </div>
   </div>
 
@@ -890,7 +901,6 @@
       document.getElementById('login-page').style.display = 'none';
       document.getElementById('main-app').style.display = '';
       document.getElementById('bottom-nav').style.display = 'flex';
-      document.getElementById('summary-username').textContent = user.username;
     }
 
     function setActiveNav(name) {
@@ -949,6 +959,130 @@
       await fetch('/api/auth/logout', { method: 'POST' });
       currentUser = null;
       showLoginPage();
+    }
+
+    // --- Dashboard ---
+    let dashInterval = null;
+    let dashSnapshots = {}; // habitId → { activeStart, weekSessionsMs } for live timer updates
+
+    async function renderDashboard() {
+      if (dashInterval) { clearInterval(dashInterval); dashInterval = null; }
+      dashSnapshots = {};
+      const el = document.getElementById('dashboard-cards');
+      if (userHabits.length === 0) {
+        el.innerHTML = '<div class="no-history">No habits yet — add one in Settings.</div>';
+        return;
+      }
+      el.innerHTML = '<div class="dash-empty">Loading…</div>';
+
+      const weekDays = getCurrentWeekDays();
+      const summaries = await Promise.all(userHabits.map(h => fetchHabitSummary(h, weekDays)));
+      summaries.forEach((s, i) => { if (s) dashSnapshots[userHabits[i].id] = s; });
+
+      el.innerHTML = userHabits.map((h, i) => buildDashCard(h, summaries[i], weekDays)).join('');
+
+      const hasActive = userHabits.some((h, i) => h.style_slug === 'timer' && summaries[i]?.activeStart);
+      if (hasActive) {
+        dashInterval = setInterval(() => {
+          userHabits.forEach(h => {
+            const snap = dashSnapshots[h.id];
+            if (h.style_slug !== 'timer' || !snap?.activeStart) return;
+            const activeDurMs = Date.now() - snap.activeStart;
+            const weekMs      = snap.weekSessionsMs + activeDurMs;
+            const ae = document.getElementById(`dash-active-${h.id}`);
+            const we = document.getElementById(`dash-week-${h.id}`);
+            const le = document.getElementById(`dash-left-${h.id}`);
+            if (ae) ae.textContent = formatDuration(activeDurMs);
+            if (we) we.textContent = formatDuration(weekMs);
+            if (le && snap.weekGoal) {
+              const leftMs  = Math.max(0, snap.weekGoal.value - weekMs);
+              le.textContent = leftMs === 0 ? '✓ Goal reached' : formatGoalTime(leftMs);
+              le.style.color = leftMs === 0 ? 'var(--primary)' : 'inherit';
+            }
+          });
+        }, 1000);
+      }
+    }
+
+    async function fetchHabitSummary(habit, weekDays) {
+      const weekStart = weekDays[0], weekEnd = weekDays[6] + 86400000;
+      try {
+        if (habit.style_slug === 'timer') {
+          const [active, sessions, goals] = await Promise.all([
+            apiGet(`/api/habits/${habit.id}/active`),
+            apiGet(`/api/habits/${habit.id}/sessions`),
+            apiGet(`/api/habits/${habit.id}/goals`),
+          ]);
+          const weekSessionsMs = (sessions || [])
+            .filter(s => s.start >= weekStart && s.start < weekEnd)
+            .reduce((sum, s) => sum + s.duration, 0);
+          const curKey   = weekKey(getWeekMonday(Date.now()));
+          const weekGoal = (goals || []).find(g => weekKey(getWeekMonday(g.week_start_ms)) === curKey) || null;
+          return { activeStart: active ? active.start : null, weekSessionsMs, weekGoal };
+        }
+        if (habit.style_slug === 'daily') {
+          const [targets, logs] = await Promise.all([
+            apiGet(`/api/habits/${habit.id}/targets`),
+            apiGet(`/api/habits/${habit.id}/logs`),
+          ]);
+          return { targets: targets || [], logs: (logs || []).filter(l => l.day_ms >= weekStart && l.day_ms < weekEnd) };
+        }
+        if (habit.style_slug === 'todo') {
+          const todos = await apiGet(`/api/habits/${habit.id}/todos`);
+          const curKey = weekKey(getWeekMonday(Date.now()));
+          const open = (todos || []).filter(t => !t.checked && weekKey(getWeekMonday(t.week_start_ms)) === curKey);
+          return { openItems: open };
+        }
+      } catch(e) { return null; }
+      return null;
+    }
+
+    function buildDashCard(habit, data, weekDays) {
+      let content = '';
+      if (habit.style_slug === 'timer' && data) {
+        const activeDurMs = data.activeStart ? Date.now() - data.activeStart : 0;
+        const weekMs      = data.weekSessionsMs + activeDurMs;
+        const goalValue   = data.weekGoal ? data.weekGoal.value : null;
+        const leftMs      = goalValue !== null ? Math.max(0, goalValue - weekMs) : null;
+        const reached     = leftMs === 0;
+        const titleDot    = data.activeStart ? `<span class="dash-active-dot"></span>` : '';
+        const activeRow   = data.activeStart
+          ? `<div class="dash-timer-row">
+               <span class="dash-timer-active" id="dash-active-${habit.id}">${formatDuration(activeDurMs)}</span>
+               <span class="dash-timer-total">Active</span>
+             </div>`
+          : `<div class="dash-empty">Not active</div>`;
+        const goalRow = goalValue !== null
+          ? `<div class="dash-timer-week-label" style="margin-top:0.4rem">${reached ? '' : 'Time left · '}<span id="dash-left-${habit.id}" style="font-weight:600;color:${reached ? 'var(--primary)' : 'inherit'}">${reached ? '✓ Goal reached' : formatGoalTime(leftMs)}</span></div>`
+          : '';
+        content = `${activeRow}
+          <div class="dash-timer-week-label">This week — <span id="dash-week-${habit.id}">${formatDuration(weekMs)}</span></div>
+          ${goalRow}`;
+        return `<button class="dash-card" onclick="switchHabit(${habit.id})">
+          <div class="dash-card-title">${titleDot}${habit.name}</div>${content}</button>`;
+      }
+      if (habit.style_slug === 'daily' && data) {
+        const circles = weekDays.map((dayMs, i) =>
+          `<div class="dash-day-cell">
+            ${buildDailyCircleSVG(dayMs, 34, data.targets, data.logs)}
+            <span class="dash-day-name">${DAY_NAMES[i]}</span>
+          </div>`
+        ).join('');
+        content = `<div class="dash-week-row">${circles}</div>`;
+      }
+      if (habit.style_slug === 'todo' && data) {
+        if (data.openItems.length === 0) {
+          content = `<div class="dash-empty">All done this week ✓</div>`;
+        } else {
+          const shown = data.openItems.slice(0, 3);
+          const more  = data.openItems.length - 3;
+          content = `<div class="dash-todo-list">${shown.map(t =>
+            `<div class="dash-todo-item">· ${t.text}</div>`).join('')}</div>` +
+            (more > 0 ? `<div class="dash-todo-more">+${more} more</div>` : '');
+        }
+      }
+      return `<button class="dash-card" onclick="switchHabit(${habit.id})">
+        <div class="dash-card-title">${habit.name}</div>${content}</button>`;
     }
 
     // --- Profile image ---
@@ -1039,6 +1173,7 @@
     }
 
     async function switchHabit(value) {
+      if (value !== 'summary' && dashInterval) { clearInterval(dashInterval); dashInterval = null; }
       if (value === 'profile') {
         document.getElementById('habit-menu').classList.remove('open');
         showSection('profile');
@@ -1050,6 +1185,7 @@
         setActiveNav('dashboard');
         setActiveMenuItem('summary');
         showSection('summary');
+        renderDashboard();
         return;
       }
       if (value === 'settings') {
@@ -1183,8 +1319,19 @@
 
     // --- Timer helpers ---
     function updateTimer() {
-      if (activeStart) {
-        document.getElementById('timer').textContent = formatDuration(Date.now() - activeStart);
+      if (!activeStart) return;
+      document.getElementById('timer').textContent = formatDuration(Date.now() - activeStart);
+      const leftEl = document.getElementById('timer-goal-left');
+      if (leftEl) {
+        const curKey     = weekKey(getWeekMonday(Date.now()));
+        const goal       = timerGoals[curKey];
+        const weekDoneMs = timerSessions
+          .filter(s => weekKey(getWeekMonday(s.start)) === curKey)
+          .reduce((sum, s) => sum + s.duration, 0);
+        const totalMs = weekDoneMs + (Date.now() - activeStart);
+        const leftMs  = Math.max(0, goal.value - totalMs);
+        leftEl.textContent  = leftMs === 0 ? '✓ Goal reached' : formatGoalTime(leftMs) + ' left';
+        leftEl.className    = 'goal-left ' + (leftMs === 0 ? 'reached' : 'remaining');
       }
     }
 
@@ -1319,9 +1466,15 @@
         .filter(s => weekKey(getWeekMonday(s.start)) === currentKey)
         .reduce((sum, s) => sum + s.duration, 0);
 
+      const activeDurMs = activeStart ? Date.now() - activeStart : 0;
+      const totalMs     = weekTotalMs + activeDurMs;
+      const leftMs      = goalValue !== null ? Math.max(0, goalValue - totalMs) : null;
+      const reached     = leftMs === 0;
+
       const progressHTML = goalValue !== null
         ? `<span class="goal-value">${formatGoalTime(goalValue)}</span>
-           <span class="goal-progress">${formatDuration(weekTotalMs)} so far</span>`
+           <span class="goal-progress">${formatDuration(totalMs)} done</span>
+           <span class="goal-left ${reached ? 'reached' : 'remaining'}" id="timer-goal-left">${reached ? '✓ Goal reached' : formatGoalTime(leftMs) + ' left'}</span>`
         : `<span class="goal-empty">No goal set</span>`;
 
       const { d, h, m } = goalValue !== null ? msToGoalParts(goalValue) : { d: 0, h: 16, m: 0 };
@@ -1595,17 +1748,47 @@
       return n % 1 === 0 ? String(n) : n.toFixed(1).replace(/\.0$/, '');
     }
 
-    function buildCirclesHTML(weekDays, cssClass, useLogs) {
+    function buildDailyCircleSVG(dayMs, size, targets, logs) {
+      targets = targets || dailyTargets;
+      logs    = logs    || allDailyLogs;
+      const cx = size / 2, cy = size / 2;
+      const r  = size * 0.38;
+      const sw = size * 0.115;
+      const C  = 2 * Math.PI * r;
+      const n  = targets.length;
+      const bg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-nest)" stroke-width="${sw}"/>`;
+      if (n === 0) return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}</svg>`;
+      const gapPx  = n > 1 ? Math.min(4, C / n * 0.12) : 0;
+      const segLen = C / n - gapPx;
+      const segs = targets.map((t, i) => {
+        const log = logs.find(l => l.target_id === t.id && l.day_ms === dayMs);
+        const val = log ? log.value : 0;
+        let color;
+        if (t.mode === 'limit') {
+          color = val > t.target_value ? '#c0392b' : val > 0 ? 'var(--primary)' : null;
+        } else {
+          color = val >= t.target_value ? 'var(--primary)' : val > 0 ? '#E3963E' : null;
+        }
+        if (!color) return '';
+        const offset = C / 4 - i * (C / n);
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+          stroke="${color}" stroke-width="${sw}"
+          stroke-dasharray="${segLen.toFixed(2)} ${(C - segLen).toFixed(2)}"
+          stroke-dashoffset="${offset.toFixed(2)}"/>`;
+      }).join('');
+      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}${segs}</svg>`;
+    }
+
+    function buildCirclesHTML(weekDays, cssClass) {
+      const isHistory = cssClass === 'week-circles-history';
+      const ringSize  = isHistory ? 36 : 56;
       return `<div class="${cssClass}">` +
-        weekDays.map((dayMs, i) => {
-          const complete = useLogs ? isDayComplete(dayMs) : false;
-          const partial  = useLogs && !complete ? isDayPartial(dayMs) : false;
-          const cls = complete ? ' done' : (partial ? ' partial' : '');
-          return `<div class="day-circle${cls}">
-            <div class="day-circle-ring"></div>
+        weekDays.map((dayMs, i) => `
+          <div class="day-circle">
+            ${buildDailyCircleSVG(dayMs, ringSize)}
             <span class="day-circle-name">${DAY_NAMES[i]}</span>
-          </div>`;
-        }).join('') + '</div>';
+          </div>`
+        ).join('') + '</div>';
     }
 
     function renderDailyTargetsToday() {
@@ -1673,7 +1856,7 @@
     }
 
     function renderDailyCurrentWeek() {
-      document.getElementById('daily-current').innerHTML = buildCirclesHTML(getCurrentWeekDays(), 'week-circles', true);
+      document.getElementById('daily-current').innerHTML = buildCirclesHTML(getCurrentWeekDays(), 'week-circles');
     }
 
     function toggleDailyWeek(key) {
@@ -1724,7 +1907,7 @@
             </div>
           </div>
           <div class="week-sessions" id="dweek-${key}" style="${isOpen ? '' : 'display:none'}">
-            ${buildCirclesHTML(weekDays, 'week-circles-history', true)}
+            ${buildCirclesHTML(weekDays, 'week-circles-history')}
           </div>
         </div>`;
       }).join('');
@@ -1733,6 +1916,7 @@
     let editingTargetId = null;
 
     function renderDailyTargetsList() {
+      document.getElementById('add-target-card').style.display = dailyTargets.length >= 4 ? 'none' : '';
       const el = document.getElementById('daily-targets-manage');
       if (dailyTargets.length === 0) { el.innerHTML = ''; return; }
       el.innerHTML = dailyTargets.map(t => {
