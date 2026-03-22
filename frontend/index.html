@@ -308,7 +308,9 @@
     /* Add target form */
     .daily-manage { margin-top: 1rem; }
     .daily-manage-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--on-surface-muted); margin-bottom: 0.75rem; }
-    .daily-target-row { display: flex; align-items: center; gap: 0.5rem; background: var(--surface-nest); border-radius: var(--radius-lg); padding: 0.6rem 0.75rem; margin-bottom: 0.4rem; }
+    .daily-target-row-wrap { margin-bottom: 0.4rem; }
+    .daily-target-row { display: flex; align-items: center; gap: 0.5rem; background: var(--surface-nest); border-radius: var(--radius-lg); padding: 0.6rem 0.75rem; }
+    .edit-target-form { background: var(--surface-card); border-radius: 0 0 var(--radius-lg) var(--radius-lg); padding: 0.75rem; box-shadow: var(--shadow); }
     .daily-target-row-name { flex: 1; font-size: 0.9rem; color: var(--on-surface-var); }
     .daily-target-row-meta { font-size: 0.75rem; color: var(--on-surface-muted); }
     .add-target-card { background: var(--surface-card); border-radius: var(--radius-xl); padding: 1.25rem; box-shadow: var(--shadow); margin-top: 0.75rem; }
@@ -1698,17 +1700,61 @@
       }).join('');
     }
 
+    let editingTargetId = null;
+
     function renderDailyTargetsList() {
       const el = document.getElementById('daily-targets-manage');
       if (dailyTargets.length === 0) { el.innerHTML = ''; return; }
       el.innerHTML = dailyTargets.map(t => {
         const unitLabel = t.unit ? ` ${t.unit}` : '';
-        return `<div class="daily-target-row">
-          <span class="daily-target-row-name">${t.name}</span>
-          <span class="daily-target-row-meta">goal ${formatNum(t.target_value)}${unitLabel} · step ${formatNum(t.step)}${unitLabel}</span>
-          <button class="delete-btn" onclick="deleteDailyTarget(${t.id})" title="Delete">&times;</button>
+        const isEditing = editingTargetId === t.id;
+        return `<div class="daily-target-row-wrap">
+          <div class="daily-target-row">
+            <span class="daily-target-row-name">${t.name}</span>
+            <span class="daily-target-row-meta">goal ${formatNum(t.target_value)}${unitLabel} · step ${formatNum(t.step)}${unitLabel}</span>
+            <button class="edit-btn" onclick="toggleEditTarget(${t.id})" title="Edit">&#9998;</button>
+            <button class="delete-btn" onclick="deleteDailyTarget(${t.id})" title="Delete">&times;</button>
+          </div>
+          <div class="edit-target-form" id="edit-target-${t.id}" style="${isEditing ? '' : 'display:none'}">
+            <div class="add-target-grid">
+              <input class="full-width" id="et-name-${t.id}" value="${t.name}" placeholder="Name">
+              <input id="et-unit-${t.id}" value="${t.unit}" placeholder="Unit (e.g. ml)">
+              <input id="et-value-${t.id}" type="number" min="0.1" step="any" value="${t.target_value}" placeholder="Goal">
+              <input id="et-step-${t.id}" type="number" min="0.1" step="any" value="${t.step}" placeholder="Step">
+            </div>
+            <div style="display:flex;gap:0.5rem">
+              <button class="add-target-btn" onclick="updateDailyTarget(${t.id})">Save</button>
+              <button class="btn-cancel" onclick="toggleEditTarget(${t.id})">Cancel</button>
+            </div>
+            <div class="add-target-error" id="et-error-${t.id}"></div>
+          </div>
         </div>`;
       }).join('');
+    }
+
+    function toggleEditTarget(id) {
+      editingTargetId = editingTargetId === id ? null : id;
+      renderDailyTargetsList();
+    }
+
+    async function updateDailyTarget(id) {
+      const name  = document.getElementById(`et-name-${id}`).value.trim();
+      const unit  = document.getElementById(`et-unit-${id}`).value.trim();
+      const val   = parseFloat(document.getElementById(`et-value-${id}`).value);
+      const step  = parseFloat(document.getElementById(`et-step-${id}`).value);
+      const errEl = document.getElementById(`et-error-${id}`);
+      errEl.textContent = '';
+      if (!name)           { errEl.textContent = 'Name is required.'; return; }
+      if (!val  || val  <= 0) { errEl.textContent = 'Goal must be > 0.'; return; }
+      if (!step || step <= 0) { errEl.textContent = 'Step must be > 0.'; return; }
+      const result = await apiPut(`/api/habits/${currentHabit.id}/targets/${id}`, { name, unit, target_value: val, step });
+      if (result) {
+        const idx = dailyTargets.findIndex(t => t.id === id);
+        if (idx >= 0) dailyTargets[idx] = result;
+        editingTargetId = null;
+        renderDailyTargetsToday();
+        renderDailyTargetsList();
+      }
     }
 
     async function createDailyTarget() {
