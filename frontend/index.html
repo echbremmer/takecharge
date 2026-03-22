@@ -297,6 +297,10 @@
       transition: width 300ms ease-out;
     }
     .daily-target-card.done .daily-progress-fill { background: linear-gradient(90deg, var(--primary), #6a8f5e); }
+    .daily-target-card.over-limit .daily-progress-fill { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+    .daily-target-card.over-limit { box-shadow: 0 4px 24px 0 rgba(192, 57, 43, 0.18); }
+    .daily-target-card.over-limit .daily-target-value { color: #c0392b; font-weight: 600; }
+    .daily-over-badge { font-size: 0.75rem; color: #c0392b; font-weight: 600; flex: 1; text-align: center; }
     .daily-target-controls { display: flex; align-items: center; gap: 0.5rem; }
     .daily-btn { background: var(--surface-nest); border: none; border-radius: var(--radius-pill); width: 36px; height: 36px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--on-surface-var); transition: background var(--transition), color var(--transition); flex-shrink: 0; }
     .daily-btn:hover:not(:disabled) { background: var(--primary-fixed); color: var(--primary); }
@@ -722,6 +726,10 @@
           <input id="target-value" type="number" min="0.1" step="any" placeholder="Goal (e.g. 2500)">
           <input id="target-step" type="number" min="0.1" step="any" placeholder="Step (e.g. 250)">
         </div>
+        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--on-surface-var);margin-bottom:0.75rem;cursor:pointer">
+          <input type="checkbox" id="target-is-limit" style="accent-color:var(--primary)">
+          This is a limit (staying under is good)
+        </label>
         <button class="add-target-btn" onclick="createDailyTarget()">Add target</button>
         <div class="add-target-error" id="add-target-error"></div>
       </div>
@@ -1569,6 +1577,7 @@
       if (dailyTargets.length === 0) return false;
       return dailyTargets.every(t => {
         const log = allDailyLogs.find(l => l.target_id === t.id && l.day_ms === dayMs);
+        if (t.mode === 'limit') return log && log.value <= t.target_value;
         return log && log.value >= t.target_value;
       });
     }
@@ -1576,7 +1585,9 @@
     function isDayPartial(dayMs) {
       return allDailyLogs.some(l => {
         const t = dailyTargets.find(t => t.id === l.target_id);
-        return l.day_ms === dayMs && t && l.value > 0;
+        if (!t || l.day_ms !== dayMs) return false;
+        if (t.mode === 'limit') return l.value > t.target_value; // over limit = bad = orange
+        return l.value > 0;
       });
     }
 
@@ -1607,10 +1618,26 @@
         const log = dailyLogs[t.id];
         const val = log ? log.value : 0;
         const pct = Math.min(100, (val / t.target_value) * 100);
-        const done = val >= t.target_value;
         const unitLabel = t.unit ? ' ' + t.unit : '';
+        const stepLabel = t.step !== 1 ? formatNum(t.step) + unitLabel + ' per tap' : '';
+
+        let cardClass = '', middleEl = '';
+        if (t.mode === 'limit') {
+          const over = val > t.target_value;
+          cardClass = over ? ' over-limit' : '';
+          middleEl = over
+            ? `<span class="daily-over-badge">Over limit!</span>`
+            : `<span class="daily-step-label">${stepLabel}</span>`;
+        } else {
+          const done = val >= t.target_value;
+          cardClass = done ? ' done' : '';
+          middleEl = done
+            ? `<span class="daily-done-badge">✓ Done</span>`
+            : `<span class="daily-step-label">${stepLabel}</span>`;
+        }
+
         return `
-        <div class="daily-target-card${done ? ' done' : ''}">
+        <div class="daily-target-card${cardClass}">
           <div class="daily-target-header">
             <span class="daily-target-name">${t.name}</span>
             <span class="daily-target-value">${formatNum(val)} / ${formatNum(t.target_value)}${unitLabel}</span>
@@ -1620,8 +1647,8 @@
           </div>
           <div class="daily-target-controls">
             <button class="daily-btn" onclick="logDelta(${t.id},${t.target_value},${-t.step})" ${val <= 0 ? 'disabled' : ''}>−</button>
-            <span class="${done ? 'daily-done-badge' : 'daily-step-label'}">${done ? '✓ Done' : (t.step !== 1 ? '+' + formatNum(t.step) + unitLabel + ' per tap' : '')}</span>
-            <button class="daily-btn" onclick="logDelta(${t.id},${t.target_value},${t.step})" ${done ? 'disabled' : ''}>+</button>
+            ${middleEl}
+            <button class="daily-btn" onclick="logDelta(${t.id},${t.target_value},${t.step})">+</button>
           </div>
         </div>`;
       }).join('');
@@ -1631,7 +1658,10 @@
       const todayMs = getDayStartMs(Date.now());
       const log = dailyLogs[targetId];
       const current = log ? log.value : 0;
-      const newVal = Math.max(0, Math.min(targetValue, current + delta));
+      const t = dailyTargets.find(t => t.id === targetId);
+      const isLimit = t && t.mode === 'limit';
+      // limits have no upper cap (you can always log more); targets cap at target_value
+      const newVal = Math.max(0, isLimit ? current + delta : Math.min(targetValue, current + delta));
       const result = await apiPost(`/api/habits/${currentHabit.id}/logs`, { target_id: targetId, day_ms: todayMs, value: newVal });
       if (result) {
         dailyLogs[targetId] = result;
@@ -1708,10 +1738,12 @@
       el.innerHTML = dailyTargets.map(t => {
         const unitLabel = t.unit ? ` ${t.unit}` : '';
         const isEditing = editingTargetId === t.id;
+        const isLimit = t.mode === 'limit';
+        const modeLabel = isLimit ? ' · limit' : '';
         return `<div class="daily-target-row-wrap">
           <div class="daily-target-row">
             <span class="daily-target-row-name">${t.name}</span>
-            <span class="daily-target-row-meta">goal ${formatNum(t.target_value)}${unitLabel} · step ${formatNum(t.step)}${unitLabel}</span>
+            <span class="daily-target-row-meta">${isLimit ? 'limit' : 'goal'} ${formatNum(t.target_value)}${unitLabel} · step ${formatNum(t.step)}${unitLabel}${modeLabel}</span>
             <button class="edit-btn" onclick="toggleEditTarget(${t.id})" title="Edit">&#9998;</button>
             <button class="delete-btn" onclick="deleteDailyTarget(${t.id})" title="Delete">&times;</button>
           </div>
@@ -1719,9 +1751,13 @@
             <div class="add-target-grid">
               <input class="full-width" id="et-name-${t.id}" value="${t.name}" placeholder="Name">
               <input id="et-unit-${t.id}" value="${t.unit}" placeholder="Unit (e.g. ml)">
-              <input id="et-value-${t.id}" type="number" min="0.1" step="any" value="${t.target_value}" placeholder="Goal">
+              <input id="et-value-${t.id}" type="number" min="0.1" step="any" value="${t.target_value}" placeholder="${isLimit ? 'Limit' : 'Goal'}">
               <input id="et-step-${t.id}" type="number" min="0.1" step="any" value="${t.step}" placeholder="Step">
             </div>
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--on-surface-var);margin-bottom:0.75rem;cursor:pointer">
+              <input type="checkbox" id="et-limit-${t.id}" ${isLimit ? 'checked' : ''} style="accent-color:var(--primary)">
+              This is a limit (staying under is good)
+            </label>
             <div style="display:flex;gap:0.5rem">
               <button class="add-target-btn" onclick="updateDailyTarget(${t.id})">Save</button>
               <button class="btn-cancel" onclick="toggleEditTarget(${t.id})">Cancel</button>
@@ -1742,12 +1778,13 @@
       const unit  = document.getElementById(`et-unit-${id}`).value.trim();
       const val   = parseFloat(document.getElementById(`et-value-${id}`).value);
       const step  = parseFloat(document.getElementById(`et-step-${id}`).value);
+      const mode  = document.getElementById(`et-limit-${id}`).checked ? 'limit' : 'target';
       const errEl = document.getElementById(`et-error-${id}`);
       errEl.textContent = '';
       if (!name)           { errEl.textContent = 'Name is required.'; return; }
       if (!val  || val  <= 0) { errEl.textContent = 'Goal must be > 0.'; return; }
       if (!step || step <= 0) { errEl.textContent = 'Step must be > 0.'; return; }
-      const result = await apiPut(`/api/habits/${currentHabit.id}/targets/${id}`, { name, unit, target_value: val, step });
+      const result = await apiPut(`/api/habits/${currentHabit.id}/targets/${id}`, { name, unit, target_value: val, step, mode });
       if (result) {
         const idx = dailyTargets.findIndex(t => t.id === id);
         if (idx >= 0) dailyTargets[idx] = result;
@@ -1762,18 +1799,20 @@
       const unit  = document.getElementById('target-unit').value.trim();
       const val   = parseFloat(document.getElementById('target-value').value);
       const step  = parseFloat(document.getElementById('target-step').value);
+      const mode  = document.getElementById('target-is-limit').checked ? 'limit' : 'target';
       const errEl = document.getElementById('add-target-error');
       errEl.textContent = '';
-      if (!name)          { errEl.textContent = 'Name is required.'; return; }
-      if (!val || val <= 0) { errEl.textContent = 'Goal must be > 0.'; return; }
+      if (!name)            { errEl.textContent = 'Name is required.'; return; }
+      if (!val  || val  <= 0) { errEl.textContent = 'Goal must be > 0.'; return; }
       if (!step || step <= 0) { errEl.textContent = 'Step must be > 0.'; return; }
-      const result = await apiPost(`/api/habits/${currentHabit.id}/targets`, { name, unit, target_value: val, step });
+      const result = await apiPost(`/api/habits/${currentHabit.id}/targets`, { name, unit, target_value: val, step, mode });
       if (result) {
         dailyTargets.push(result);
         document.getElementById('target-name').value = '';
         document.getElementById('target-unit').value = '';
         document.getElementById('target-value').value = '';
         document.getElementById('target-step').value = '';
+        document.getElementById('target-is-limit').checked = false;
         renderDailyTargetsToday();
         renderDailyTargetsList();
       }
