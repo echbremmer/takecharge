@@ -10,11 +10,11 @@ class AuthState {
 
   const AuthState({required this.status, this.user, this.error});
 
-  AuthState copyWith({AuthStatus? status, Map<String, dynamic>? user, String? error}) =>
+  AuthState copyWith({AuthStatus? status, Map<String, dynamic>? user, String? error, bool clearError = false}) =>
       AuthState(
         status: status ?? this.status,
         user: user ?? this.user,
-        error: error ?? this.error,
+        error: clearError ? null : (error ?? this.error),
       );
 }
 
@@ -61,6 +61,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await authApi.logout();
     state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  void clearError() {
+    state = state.copyWith(clearError: true);
   }
 
   String _extractError(Object e) {
