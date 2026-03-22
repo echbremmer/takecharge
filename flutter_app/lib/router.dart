@@ -7,41 +7,77 @@ import 'screens/auth_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/habit_screen.dart';
+import 'screens/shell_screen.dart';
+
+class _AuthListenable extends ChangeNotifier {
+  void notify() => notifyListeners();
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final notifier = _AuthListenable();
+  ref.listen(authProvider, (_, __) => notifier.notify());
+  ref.onDispose(notifier.dispose);
 
   return GoRouter(
     initialLocation: '/',
+    refreshListenable: notifier,
     redirect: (context, state) {
+      final authState = ref.read(authProvider);
       final isLoading = authState.status == AuthStatus.loading;
       final isAuthed = authState.status == AuthStatus.authenticated;
-      final isAuthRoute = state.uri.path == '/auth';
+      final path = state.uri.path;
 
-      if (isLoading) return null;
-      if (!isAuthed && !isAuthRoute) return '/auth';
-      if (isAuthed && isAuthRoute) return '/';
+      // Show loading screen while checking auth
+      if (isLoading) return path == '/loading' ? null : '/loading';
+
+      // Send unauthenticated users to login
+      if (!isAuthed && path != '/auth') return '/auth';
+
+      // Send authenticated users away from auth/loading screens
+      if (isAuthed && (path == '/auth' || path == '/loading')) return '/';
+
       return null;
     },
     routes: [
+      // Loading splash
       GoRoute(
-        path: '/',
-        builder: (context, state) => const DashboardScreen(),
+        path: '/loading',
+        builder: (_, __) => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
       ),
+
+      // Auth (outside shell — no bottom nav)
       GoRoute(
         path: '/auth',
-        builder: (context, state) => const AuthScreen(),
+        builder: (_, __) => const AuthScreen(),
       ),
-      GoRoute(
-        path: '/profile',
-        builder: (context, state) => const ProfileScreen(),
-      ),
+
+      // Habit detail (outside shell — no bottom nav)
       GoRoute(
         path: '/habit/:id',
         builder: (context, state) {
           final id = int.parse(state.pathParameters['id']!);
           return HabitScreen(habitId: id);
         },
+      ),
+
+      // Main app shell (with bottom nav)
+      ShellRoute(
+        builder: (context, state, child) => ShellScreen(
+          location: state.uri.path,
+          child: child,
+        ),
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, __) => const DashboardScreen(),
+          ),
+          GoRoute(
+            path: '/profile',
+            builder: (_, __) => const ProfileScreen(),
+          ),
+        ],
       ),
     ],
   );

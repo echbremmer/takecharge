@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -20,9 +19,9 @@ class ApiClient {
   late final String baseUrl;
 
   Future<void> init() async {
-    baseUrl = _defaultBase.isNotEmpty
-        ? _defaultBase
-        : (kIsWeb ? '' : 'http://localhost:8080');
+    // Dev default: always localhost:8080.
+    // Production: pass --dart-define=API_BASE= (empty = same-origin) or a full URL.
+    baseUrl = _defaultBase.isNotEmpty ? _defaultBase : 'http://localhost:8080';
 
     final options = BaseOptions(
       baseUrl: baseUrl,

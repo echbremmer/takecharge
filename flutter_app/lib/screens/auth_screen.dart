@@ -23,10 +23,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
-    // Check auth on load
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(authProvider.notifier).checkAuth();
-    });
   }
 
   @override

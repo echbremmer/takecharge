@@ -15,13 +15,7 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TakeCharge'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            onPressed: () => context.push('/profile'),
-          ),
-        ],
+        title: const Text('TAKECHARGE'),
       ),
       body: habits.when(
         loading: () => const Center(child: CircularProgressIndicator()),
