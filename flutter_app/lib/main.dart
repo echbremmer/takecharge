@@ -2,12 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/client.dart';
+import 'providers/auth_provider.dart';
 import 'router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ApiClient.instance.init();
-  runApp(const ProviderScope(child: TakeChargeApp()));
+  runApp(const ProviderScope(child: AppStartup()));
+}
+
+/// Triggers checkAuth once on startup before rendering anything.
+class AppStartup extends ConsumerStatefulWidget {
+  const AppStartup({super.key});
+
+  @override
+  ConsumerState<AppStartup> createState() => _AppStartupState();
+}
+
+class _AppStartupState extends ConsumerState<AppStartup> {
+  @override
+  void initState() {
+    super.initState();
+    ref.read(authProvider.notifier).checkAuth();
+  }
+
+  @override
+  Widget build(BuildContext context) => const TakeChargeApp();
 }
 
 class TakeChargeApp extends ConsumerWidget {
@@ -56,6 +76,24 @@ class AppTheme {
           backgroundColor: sageDark,
           foregroundColor: white,
           elevation: 0,
+          centerTitle: true,
+          titleTextStyle: TextStyle(
+            color: white,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 3.0,
+            fontFamily: 'Manrope',
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: sageDark,
+          indicatorColor: sageMid,
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            return const IconThemeData(color: white);
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            return const TextStyle(color: white, fontSize: 11);
+          }),
         ),
         cardTheme: CardThemeData(
           color: white,
