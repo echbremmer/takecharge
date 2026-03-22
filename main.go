@@ -1009,6 +1009,12 @@ func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
 			http.Error(w, "name, target_value and step are required and must be > 0", 400)
 			return
 		}
+		var count int
+		db.QueryRow("SELECT COUNT(*) FROM daily_targets WHERE habit_id=?", habitID).Scan(&count)
+		if count >= 4 {
+			http.Error(w, "maximum of 4 targets per habit", 400)
+			return
+		}
 		var maxPos int
 		db.QueryRow("SELECT COALESCE(MAX(position), -1) FROM daily_targets WHERE habit_id=?", habitID).Scan(&maxPos)
 		res, err := db.Exec(

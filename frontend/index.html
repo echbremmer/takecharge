@@ -339,12 +339,6 @@
     .add-target-btn:hover { opacity: 0.88; }
     .add-target-error { font-size: 0.8rem; color: #8b4a47; margin-top: 0.5rem; min-height: 1em; }
 
-    /* Day circle partial state */
-    .day-circle.partial .day-circle-ring {
-      background: linear-gradient(135deg, #E3963E, #f0b96a);
-      box-shadow: 0 4px 16px 0 rgba(227, 150, 62, 0.25);
-    }
-    .day-circle.partial .day-circle-name { color: #c47d2a; }
 
     /* Daily style — circles */
     .active-week-label { text-align: center; font-size: 0.85rem; color: var(--on-surface-muted); margin-bottom: 0.25rem; }
@@ -355,17 +349,7 @@
     }
     .week-circles .day-circle:nth-child(7) { grid-column: 2; }
 
-    .day-circle { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; cursor: pointer; user-select: none; }
-
-    .day-circle-ring {
-      width: 56px; height: 56px; border-radius: 50%;
-      background: var(--surface-nest); box-shadow: var(--shadow);
-      transition: background var(--transition), box-shadow var(--transition);
-    }
-    .day-circle.done .day-circle-ring {
-      background: linear-gradient(135deg, var(--primary), var(--primary-container));
-      box-shadow: 0 4px 16px 0 rgba(85, 98, 77, 0.32);
-    }
+    .day-circle { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; user-select: none; }
 
     .day-circle-name { font-size: 0.65rem; color: var(--on-surface-muted); text-transform: uppercase; letter-spacing: 0.08em; }
     .day-circle.done .day-circle-name { color: var(--primary); }
@@ -374,7 +358,7 @@
       display: flex; flex-direction: row; gap: 0.5rem;
       justify-content: center; margin: 0.75rem 0 0.5rem;
     }
-    .week-circles-history .day-circle-ring { width: 36px; height: 36px; }
+    .week-circles-history .day-circle-name { font-size: 0.55rem; }
     .week-circles-history .day-circle-name { font-size: 0.55rem; }
 
     /* Todo style */
@@ -718,7 +702,7 @@
     <div class="daily-manage">
       <p class="daily-manage-title">Targets</p>
       <div id="daily-targets-manage"></div>
-      <div class="add-target-card">
+      <div class="add-target-card" id="add-target-card">
         <h3>Add a target</h3>
         <div class="add-target-grid">
           <input class="full-width" id="target-name" placeholder="Name (e.g. Water)">
@@ -1595,17 +1579,45 @@
       return n % 1 === 0 ? String(n) : n.toFixed(1).replace(/\.0$/, '');
     }
 
-    function buildCirclesHTML(weekDays, cssClass, useLogs) {
+    function buildDailyCircleSVG(dayMs, size) {
+      const cx = size / 2, cy = size / 2;
+      const r  = size * 0.38;
+      const sw = size * 0.115;
+      const C  = 2 * Math.PI * r;
+      const n  = dailyTargets.length;
+      const bg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-nest)" stroke-width="${sw}"/>`;
+      if (n === 0) return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}</svg>`;
+      const gapPx  = n > 1 ? Math.min(4, C / n * 0.12) : 0;
+      const segLen = C / n - gapPx;
+      const segs = dailyTargets.map((t, i) => {
+        const log = allDailyLogs.find(l => l.target_id === t.id && l.day_ms === dayMs);
+        const val = log ? log.value : 0;
+        let color;
+        if (t.mode === 'limit') {
+          color = val > t.target_value ? '#c0392b' : val > 0 ? 'var(--primary)' : null;
+        } else {
+          color = val >= t.target_value ? 'var(--primary)' : val > 0 ? '#E3963E' : null;
+        }
+        if (!color) return '';
+        const offset = C / 4 - i * (C / n);
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+          stroke="${color}" stroke-width="${sw}"
+          stroke-dasharray="${segLen.toFixed(2)} ${(C - segLen).toFixed(2)}"
+          stroke-dashoffset="${offset.toFixed(2)}"/>`;
+      }).join('');
+      return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}${segs}</svg>`;
+    }
+
+    function buildCirclesHTML(weekDays, cssClass) {
+      const isHistory = cssClass === 'week-circles-history';
+      const ringSize  = isHistory ? 36 : 56;
       return `<div class="${cssClass}">` +
-        weekDays.map((dayMs, i) => {
-          const complete = useLogs ? isDayComplete(dayMs) : false;
-          const partial  = useLogs && !complete ? isDayPartial(dayMs) : false;
-          const cls = complete ? ' done' : (partial ? ' partial' : '');
-          return `<div class="day-circle${cls}">
-            <div class="day-circle-ring"></div>
+        weekDays.map((dayMs, i) => `
+          <div class="day-circle">
+            ${buildDailyCircleSVG(dayMs, ringSize)}
             <span class="day-circle-name">${DAY_NAMES[i]}</span>
-          </div>`;
-        }).join('') + '</div>';
+          </div>`
+        ).join('') + '</div>';
     }
 
     function renderDailyTargetsToday() {
@@ -1673,7 +1685,7 @@
     }
 
     function renderDailyCurrentWeek() {
-      document.getElementById('daily-current').innerHTML = buildCirclesHTML(getCurrentWeekDays(), 'week-circles', true);
+      document.getElementById('daily-current').innerHTML = buildCirclesHTML(getCurrentWeekDays(), 'week-circles');
     }
 
     function toggleDailyWeek(key) {
@@ -1724,7 +1736,7 @@
             </div>
           </div>
           <div class="week-sessions" id="dweek-${key}" style="${isOpen ? '' : 'display:none'}">
-            ${buildCirclesHTML(weekDays, 'week-circles-history', true)}
+            ${buildCirclesHTML(weekDays, 'week-circles-history')}
           </div>
         </div>`;
       }).join('');
@@ -1733,6 +1745,7 @@
     let editingTargetId = null;
 
     function renderDailyTargetsList() {
+      document.getElementById('add-target-card').style.display = dailyTargets.length >= 4 ? 'none' : '';
       const el = document.getElementById('daily-targets-manage');
       if (dailyTargets.length === 0) { el.innerHTML = ''; return; }
       el.innerHTML = dailyTargets.map(t => {
