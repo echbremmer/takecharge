@@ -469,6 +469,31 @@
     .settings-error { font-size: 0.85rem; color: #8b4a47; margin-top: 0.5rem; min-height: 1.2em; }
 
     /* Auth */
+    /* Dashboard */
+    .dashboard-cards { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem; }
+    .dash-card {
+      background: var(--surface-card); border-radius: var(--radius-xl);
+      padding: 1rem 1.25rem; box-shadow: var(--shadow);
+      cursor: pointer; transition: box-shadow var(--transition), transform var(--transition);
+      text-align: left; border: none; width: 100%;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .dash-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+    .dash-card-title { font-family: 'Manrope', sans-serif; font-size: 1rem; font-weight: 700; color: var(--on-surface); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+    .dash-active-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .dash-timer-row { display: flex; justify-content: space-between; align-items: baseline; }
+    .dash-timer-active { font-size: 1.4rem; font-family: 'Manrope', sans-serif; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; }
+    .dash-timer-total { font-size: 0.8rem; color: var(--on-surface-muted); }
+    .dash-timer-week-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--on-surface-muted); margin-top: 0.25rem; }
+    .dash-week-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 2px; }
+    .dash-day-cell { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; flex: 1; }
+    .dash-day-name { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--on-surface-muted); }
+    .dash-todo-list { display: flex; flex-direction: column; gap: 0.3rem; }
+    .dash-todo-item { font-size: 0.85rem; color: var(--on-surface-var); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dash-todo-more { font-size: 0.75rem; color: var(--on-surface-muted); margin-top: 0.2rem; }
+    .dash-empty { font-size: 0.85rem; color: var(--on-surface-muted); }
+
     /* Profile page */
     .profile-page { display: flex; flex-direction: column; align-items: center; padding-top: 2rem; }
     .profile-avatar-wrap {
@@ -666,6 +691,7 @@
       <span class="summary-user" id="summary-username"></span>
       <button class="btn-logout" onclick="logout()">Logout</button>
     </div>
+    <div class="dashboard-cards" id="dashboard-cards"></div>
   </div>
 
   <!-- Timer style section -->
@@ -935,6 +961,115 @@
       showLoginPage();
     }
 
+    // --- Dashboard ---
+    let dashInterval = null;
+    let dashSnapshots = {}; // habitId → { activeStart, weekSessionsMs } for live timer updates
+
+    async function renderDashboard() {
+      if (dashInterval) { clearInterval(dashInterval); dashInterval = null; }
+      dashSnapshots = {};
+      const el = document.getElementById('dashboard-cards');
+      if (userHabits.length === 0) {
+        el.innerHTML = '<div class="no-history">No habits yet — add one in Settings.</div>';
+        return;
+      }
+      el.innerHTML = '<div class="dash-empty">Loading…</div>';
+
+      const weekDays = getCurrentWeekDays();
+      const summaries = await Promise.all(userHabits.map(h => fetchHabitSummary(h, weekDays)));
+      summaries.forEach((s, i) => { if (s) dashSnapshots[userHabits[i].id] = s; });
+
+      el.innerHTML = userHabits.map((h, i) => buildDashCard(h, summaries[i], weekDays)).join('');
+
+      const hasActive = userHabits.some((h, i) => h.style_slug === 'timer' && summaries[i]?.activeStart);
+      if (hasActive) {
+        dashInterval = setInterval(() => {
+          userHabits.forEach(h => {
+            const snap = dashSnapshots[h.id];
+            if (h.style_slug !== 'timer' || !snap?.activeStart) return;
+            const activeSec = Math.floor((Date.now() - snap.activeStart) / 1000);
+            const weekMs    = snap.weekSessionsMs + (Date.now() - snap.activeStart);
+            const ae = document.getElementById(`dash-active-${h.id}`);
+            const we = document.getElementById(`dash-week-${h.id}`);
+            if (ae) ae.textContent = formatDuration(activeSec * 1000);
+            if (we) we.textContent = formatDuration(weekMs);
+          });
+        }, 1000);
+      }
+    }
+
+    async function fetchHabitSummary(habit, weekDays) {
+      const weekStart = weekDays[0], weekEnd = weekDays[6] + 86400000;
+      try {
+        if (habit.style_slug === 'timer') {
+          const [active, sessions] = await Promise.all([
+            apiGet(`/api/habits/${habit.id}/active`),
+            apiGet(`/api/habits/${habit.id}/sessions`),
+          ]);
+          const weekSessionsMs = (sessions || [])
+            .filter(s => s.start >= weekStart && s.start < weekEnd)
+            .reduce((sum, s) => sum + s.duration, 0);
+          return { activeStart: active ? active.start : null, weekSessionsMs };
+        }
+        if (habit.style_slug === 'daily') {
+          const [targets, logs] = await Promise.all([
+            apiGet(`/api/habits/${habit.id}/targets`),
+            apiGet(`/api/habits/${habit.id}/logs`),
+          ]);
+          return { targets: targets || [], logs: (logs || []).filter(l => l.day_ms >= weekStart && l.day_ms < weekEnd) };
+        }
+        if (habit.style_slug === 'todo') {
+          const todos = await apiGet(`/api/habits/${habit.id}/todos`);
+          const curKey = weekKey(getWeekMonday(Date.now()));
+          const open = (todos || []).filter(t => !t.checked && weekKey(getWeekMonday(t.week_start_ms)) === curKey);
+          return { openItems: open };
+        }
+      } catch(e) { return null; }
+      return null;
+    }
+
+    function buildDashCard(habit, data, weekDays) {
+      let content = '';
+      if (habit.style_slug === 'timer' && data) {
+        const activeDurMs = data.activeStart ? Date.now() - data.activeStart : 0;
+        const weekMs = data.weekSessionsMs + activeDurMs;
+        const titleDot = data.activeStart ? `<span class="dash-active-dot"></span>` : '';
+        const activeRow = data.activeStart
+          ? `<div class="dash-timer-row">
+               <span class="dash-timer-active" id="dash-active-${habit.id}">${formatDuration(activeDurMs)}</span>
+               <span class="dash-timer-total">Active</span>
+             </div>`
+          : `<div class="dash-empty">Not active</div>`;
+        content = `${activeRow}
+          <div class="dash-timer-week-label">This week</div>
+          <div class="dash-timer-total" id="dash-week-${habit.id}">${formatDuration(weekMs)}</div>`;
+        return `<button class="dash-card" onclick="switchHabit(${habit.id})">
+          <div class="dash-card-title">${titleDot}${habit.name}</div>${content}</button>`;
+      }
+      if (habit.style_slug === 'daily' && data) {
+        const circles = weekDays.map((dayMs, i) =>
+          `<div class="dash-day-cell">
+            ${buildDailyCircleSVG(dayMs, 34, data.targets, data.logs)}
+            <span class="dash-day-name">${DAY_NAMES[i]}</span>
+          </div>`
+        ).join('');
+        content = `<div class="dash-week-row">${circles}</div>`;
+      }
+      if (habit.style_slug === 'todo' && data) {
+        if (data.openItems.length === 0) {
+          content = `<div class="dash-empty">All done this week ✓</div>`;
+        } else {
+          const shown = data.openItems.slice(0, 3);
+          const more  = data.openItems.length - 3;
+          content = `<div class="dash-todo-list">${shown.map(t =>
+            `<div class="dash-todo-item">· ${t.text}</div>`).join('')}</div>` +
+            (more > 0 ? `<div class="dash-todo-more">+${more} more</div>` : '');
+        }
+      }
+      return `<button class="dash-card" onclick="switchHabit(${habit.id})">
+        <div class="dash-card-title">${habit.name}</div>${content}</button>`;
+    }
+
     // --- Profile image ---
     async function loadProfileImage() {
       const img = document.getElementById('profile-avatar-img');
@@ -1023,6 +1158,7 @@
     }
 
     async function switchHabit(value) {
+      if (value !== 'summary' && dashInterval) { clearInterval(dashInterval); dashInterval = null; }
       if (value === 'profile') {
         document.getElementById('habit-menu').classList.remove('open');
         showSection('profile');
@@ -1034,6 +1170,7 @@
         setActiveNav('dashboard');
         setActiveMenuItem('summary');
         showSection('summary');
+        renderDashboard();
         return;
       }
       if (value === 'settings') {
@@ -1579,18 +1716,20 @@
       return n % 1 === 0 ? String(n) : n.toFixed(1).replace(/\.0$/, '');
     }
 
-    function buildDailyCircleSVG(dayMs, size) {
+    function buildDailyCircleSVG(dayMs, size, targets, logs) {
+      targets = targets || dailyTargets;
+      logs    = logs    || allDailyLogs;
       const cx = size / 2, cy = size / 2;
       const r  = size * 0.38;
       const sw = size * 0.115;
       const C  = 2 * Math.PI * r;
-      const n  = dailyTargets.length;
+      const n  = targets.length;
       const bg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-nest)" stroke-width="${sw}"/>`;
       if (n === 0) return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}</svg>`;
       const gapPx  = n > 1 ? Math.min(4, C / n * 0.12) : 0;
       const segLen = C / n - gapPx;
-      const segs = dailyTargets.map((t, i) => {
-        const log = allDailyLogs.find(l => l.target_id === t.id && l.day_ms === dayMs);
+      const segs = targets.map((t, i) => {
+        const log = logs.find(l => l.target_id === t.id && l.day_ms === dayMs);
         const val = log ? log.value : 0;
         let color;
         if (t.mode === 'limit') {
