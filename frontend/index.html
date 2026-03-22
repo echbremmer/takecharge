@@ -276,6 +276,70 @@
       font-size: 1.05rem; color: var(--on-surface-var); scroll-snap-align: center;
     }
 
+    /* Daily targets */
+    .daily-targets-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+    .daily-target-card {
+      background: var(--surface-card); border-radius: var(--radius-xl);
+      padding: 1rem 1.25rem; box-shadow: var(--shadow);
+      transition: box-shadow var(--transition);
+    }
+    .daily-target-card.done { box-shadow: 0 4px 24px 0 rgba(85, 98, 77, 0.18); }
+    .daily-target-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6rem; }
+    .daily-target-name { font-family: 'Manrope', sans-serif; font-size: 0.95rem; font-weight: 700; color: var(--on-surface); }
+    .daily-target-value { font-size: 0.8rem; color: var(--on-surface-muted); font-variant-numeric: tabular-nums; }
+    .daily-target-card.done .daily-target-value { color: var(--primary); font-weight: 600; }
+    .daily-progress-bar {
+      height: 6px; background: var(--surface-nest); border-radius: var(--radius-pill); overflow: hidden; margin-bottom: 0.75rem;
+    }
+    .daily-progress-fill {
+      height: 100%; border-radius: var(--radius-pill);
+      background: linear-gradient(90deg, var(--primary), var(--primary-container));
+      transition: width 300ms ease-out;
+    }
+    .daily-target-card.done .daily-progress-fill { background: linear-gradient(90deg, var(--primary), #6a8f5e); }
+    .daily-target-controls { display: flex; align-items: center; gap: 0.5rem; }
+    .daily-btn { background: var(--surface-nest); border: none; border-radius: var(--radius-pill); width: 36px; height: 36px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--on-surface-var); transition: background var(--transition), color var(--transition); flex-shrink: 0; }
+    .daily-btn:hover:not(:disabled) { background: var(--primary-fixed); color: var(--primary); }
+    .daily-btn:disabled { opacity: 0.3; cursor: default; }
+    .daily-step-label { font-size: 0.75rem; color: var(--on-surface-muted); flex: 1; text-align: center; }
+    .daily-done-badge { font-size: 0.75rem; color: var(--primary); font-weight: 600; flex: 1; text-align: center; }
+    .daily-no-targets { text-align: center; color: var(--on-surface-muted); font-size: 0.9rem; padding: 2rem 0 1rem; }
+
+    /* Add target form */
+    .daily-manage { margin-top: 1rem; }
+    .daily-manage-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--on-surface-muted); margin-bottom: 0.75rem; }
+    .daily-target-row { display: flex; align-items: center; gap: 0.5rem; background: var(--surface-nest); border-radius: var(--radius-lg); padding: 0.6rem 0.75rem; margin-bottom: 0.4rem; }
+    .daily-target-row-name { flex: 1; font-size: 0.9rem; color: var(--on-surface-var); }
+    .daily-target-row-meta { font-size: 0.75rem; color: var(--on-surface-muted); }
+    .add-target-card { background: var(--surface-card); border-radius: var(--radius-xl); padding: 1.25rem; box-shadow: var(--shadow); margin-top: 0.75rem; }
+    .add-target-card h3 { font-family: 'Manrope', sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--on-surface-var); margin-bottom: 1rem; }
+    .add-target-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .add-target-grid input {
+      background: var(--surface-nest); border: none; border-radius: var(--radius-lg);
+      color: var(--on-surface); padding: 0.55rem 0.85rem; font-size: 0.85rem;
+      font-family: 'Plus Jakarta Sans', sans-serif; width: 100%;
+      transition: background var(--transition);
+    }
+    .add-target-grid input:focus { outline: none; background: var(--primary-fixed); }
+    .add-target-grid input.full-width { grid-column: 1 / -1; }
+    .add-target-btn {
+      width: 100%; background: linear-gradient(135deg, var(--primary), var(--primary-container));
+      color: #fff; border: none; border-radius: var(--radius-pill); padding: 0.6rem;
+      font-size: 0.9rem; font-weight: 700; cursor: pointer;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      box-shadow: 0 4px 16px 0 rgba(85, 98, 77, 0.2);
+      transition: opacity var(--transition);
+    }
+    .add-target-btn:hover { opacity: 0.88; }
+    .add-target-error { font-size: 0.8rem; color: #8b4a47; margin-top: 0.5rem; min-height: 1em; }
+
+    /* Day circle partial state */
+    .day-circle.partial .day-circle-ring {
+      background: linear-gradient(135deg, #E3963E, #f0b96a);
+      box-shadow: 0 4px 16px 0 rgba(227, 150, 62, 0.25);
+    }
+    .day-circle.partial .day-circle-name { color: #c47d2a; }
+
     /* Daily style — circles */
     .active-week-label { text-align: center; font-size: 0.85rem; color: var(--on-surface-muted); margin-bottom: 0.25rem; }
 
@@ -638,12 +702,27 @@
 
   <!-- Daily style section -->
   <div id="daily-section" class="habit-section" style="display:none">
+    <div class="daily-targets-list" id="daily-targets-today"></div>
     <div class="active-week-label">This Week</div>
     <div id="daily-current"></div>
-    <div id="daily-goal" style="margin-top:1.25rem"></div>
     <div class="history">
       <h2>History</h2>
       <div id="daily-history"></div>
+    </div>
+    <div class="daily-manage">
+      <p class="daily-manage-title">Targets</p>
+      <div id="daily-targets-manage"></div>
+      <div class="add-target-card">
+        <h3>Add a target</h3>
+        <div class="add-target-grid">
+          <input class="full-width" id="target-name" placeholder="Name (e.g. Water)">
+          <input id="target-unit" placeholder="Unit (e.g. ml)">
+          <input id="target-value" type="number" min="0.1" step="any" placeholder="Goal (e.g. 2500)">
+          <input id="target-step" type="number" min="0.1" step="any" placeholder="Step (e.g. 250)">
+        </div>
+        <button class="add-target-btn" onclick="createDailyTarget()">Add target</button>
+        <div class="add-target-error" id="add-target-error"></div>
+      </div>
     </div>
   </div>
 
@@ -716,6 +795,9 @@
     let activeDays          = [];
     let openDailyWeekKey    = null;
     let dailyGoals          = {};
+    let dailyTargets        = [];   // [{id, name, unit, target_value, step}]
+    let dailyLogs           = {};   // targetId → log (today)
+    let allDailyLogs        = [];   // all logs for history
 
     // Todo style state
     let todoItems        = [];
@@ -1016,19 +1098,23 @@
         await renderTimerHistory();
 
       } else if (habit.style_slug === 'daily') {
-        activeDays = []; dailyGoals = {}; openDailyWeekKey = null;
+        dailyTargets = []; dailyLogs = {}; allDailyLogs = []; openDailyWeekKey = null;
 
-        const [days, goals] = await Promise.all([
-          apiGet(`/api/habits/${id}/days`),
-          apiGet(`/api/habits/${id}/goals`)
+        const todayMs = getDayStartMs(Date.now());
+        const [targets, todayLogs, allLogs] = await Promise.all([
+          apiGet(`/api/habits/${id}/targets`),
+          apiGet(`/api/habits/${id}/logs?day=${todayMs}`),
+          apiGet(`/api/habits/${id}/logs`),
         ]);
-        activeDays = days || [];
-        dailyGoals = {};
-        for (const g of (goals || [])) dailyGoals[weekKey(getWeekMonday(g.week_start_ms))] = g;
+        dailyTargets = targets || [];
+        allDailyLogs = allLogs || [];
+        dailyLogs = {};
+        for (const l of (todayLogs || [])) dailyLogs[l.target_id] = l;
 
+        renderDailyTargetsToday();
         renderDailyCurrentWeek();
-        renderDailyGoal();
         renderDailyHistory();
+        renderDailyTargetsList();
 
       } else if (habit.style_slug === 'todo') {
         todoItems = []; openTodoWeekKey = null;
@@ -1475,77 +1561,87 @@
       });
     }
 
-    function isDayActive(dayMs)  { return activeDays.some(d => d.day_ms === dayMs); }
-    function getDayEntry(dayMs)  { return activeDays.find(d => d.day_ms === dayMs); }
+    function getDayStartMs(ms) { const d = new Date(ms); d.setHours(0,0,0,0); return d.getTime(); }
 
-    async function toggleActivityDay(dayMs) {
-      const entry = getDayEntry(dayMs);
-      if (entry) {
-        await apiDelete(`/api/habits/${currentHabit.id}/days/${entry.id}`);
-        activeDays = activeDays.filter(d => d.id !== entry.id);
-      } else {
-        const result = await apiPost(`/api/habits/${currentHabit.id}/days`, { day_ms: dayMs });
-        if (result) activeDays.push(result);
-      }
-      renderDailyCurrentWeek();
-      renderDailyGoal();
-      renderDailyHistory();
+    function isDayComplete(dayMs) {
+      if (dailyTargets.length === 0) return false;
+      return dailyTargets.every(t => {
+        const log = allDailyLogs.find(l => l.target_id === t.id && l.day_ms === dayMs);
+        return log && log.value >= t.target_value;
+      });
     }
 
-    function buildCirclesHTML(weekDays, cssClass) {
+    function isDayPartial(dayMs) {
+      return allDailyLogs.some(l => {
+        const t = dailyTargets.find(t => t.id === l.target_id);
+        return l.day_ms === dayMs && t && l.value > 0;
+      });
+    }
+
+    function formatNum(n) {
+      return n % 1 === 0 ? String(n) : n.toFixed(1).replace(/\.0$/, '');
+    }
+
+    function buildCirclesHTML(weekDays, cssClass, useLogs) {
       return `<div class="${cssClass}">` +
         weekDays.map((dayMs, i) => {
-          const done = isDayActive(dayMs) ? ' done' : '';
-          return `<div class="day-circle${done}" onclick="toggleActivityDay(${dayMs})">
+          const complete = useLogs ? isDayComplete(dayMs) : false;
+          const partial  = useLogs && !complete ? isDayPartial(dayMs) : false;
+          const cls = complete ? ' done' : (partial ? ' partial' : '');
+          return `<div class="day-circle${cls}">
             <div class="day-circle-ring"></div>
             <span class="day-circle-name">${DAY_NAMES[i]}</span>
           </div>`;
         }).join('') + '</div>';
     }
 
-    function renderDailyCurrentWeek() {
-      document.getElementById('daily-current').innerHTML = buildCirclesHTML(getCurrentWeekDays(), 'week-circles');
-    }
-
-    function renderDailyGoal() {
-      const currentKey = weekKey(getWeekMonday(Date.now()));
-      const weekStartMs = getWeekMonday(Date.now()).getTime();
-      const goal = dailyGoals[currentKey];
-      const goalValue = goal ? goal.value : null;
-      const currentCount = getCurrentWeekDays().filter(ms => isDayActive(ms)).length;
-
-      const progressHTML = goalValue !== null
-        ? `<span class="goal-value">${goalValue} days</span>
-           <span class="goal-progress">${currentCount} / ${goalValue}</span>`
-        : `<span class="goal-empty">No goal set</span>`;
-
-      document.getElementById('daily-goal').innerHTML = `
-        <div class="week-goal-card">
-          <div class="week-goal-row" id="dg-display">
-            <span class="goal-label">Weekly goal</span>
-            ${progressHTML}
-            <button class="edit-btn" onclick="editDailyGoal()" title="Edit goal">&#9998;</button>
+    function renderDailyTargetsToday() {
+      const el = document.getElementById('daily-targets-today');
+      if (dailyTargets.length === 0) {
+        el.innerHTML = `<div class="daily-no-targets">No targets yet — add one below.</div>`;
+        return;
+      }
+      el.innerHTML = dailyTargets.map(t => {
+        const log = dailyLogs[t.id];
+        const val = log ? log.value : 0;
+        const pct = Math.min(100, (val / t.target_value) * 100);
+        const done = val >= t.target_value;
+        const unitLabel = t.unit ? ' ' + t.unit : '';
+        return `
+        <div class="daily-target-card${done ? ' done' : ''}">
+          <div class="daily-target-header">
+            <span class="daily-target-name">${t.name}</span>
+            <span class="daily-target-value">${formatNum(val)} / ${formatNum(t.target_value)}${unitLabel}</span>
           </div>
-          <div class="week-goal-edit-row" id="dg-edit" style="display:none">
-            <span class="goal-label">Goal</span>
-            <input type="number" class="goal-input" id="dg-input" min="0" max="7" step="1"
-              value="${goalValue !== null ? goalValue : ''}" placeholder="0–7">
-            <span class="goal-unit">days</span>
-            <button class="btn-save" onclick="submitDailyGoal(${weekStartMs})">Save</button>
-            <button class="btn-cancel" onclick="cancelDailyGoalEdit()">Cancel</button>
+          <div class="daily-progress-bar">
+            <div class="daily-progress-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="daily-target-controls">
+            <button class="daily-btn" onclick="logDelta(${t.id},${t.target_value},${-t.step})" ${val <= 0 ? 'disabled' : ''}>−</button>
+            <span class="${done ? 'daily-done-badge' : 'daily-step-label'}">${done ? '✓ Done' : (t.step !== 1 ? '+' + formatNum(t.step) + unitLabel + ' per tap' : '')}</span>
+            <button class="daily-btn" onclick="logDelta(${t.id},${t.target_value},${t.step})" ${done ? 'disabled' : ''}>+</button>
           </div>
         </div>`;
+      }).join('');
     }
 
-    function editDailyGoal()       { document.getElementById('dg-display').style.display = 'none'; document.getElementById('dg-edit').style.display = 'flex'; document.getElementById('dg-input').focus(); }
-    function cancelDailyGoalEdit() { document.getElementById('dg-display').style.display = 'flex'; document.getElementById('dg-edit').style.display = 'none'; }
+    async function logDelta(targetId, targetValue, delta) {
+      const todayMs = getDayStartMs(Date.now());
+      const log = dailyLogs[targetId];
+      const current = log ? log.value : 0;
+      const newVal = Math.max(0, Math.min(targetValue, current + delta));
+      const result = await apiPost(`/api/habits/${currentHabit.id}/logs`, { target_id: targetId, day_ms: todayMs, value: newVal });
+      if (result) {
+        dailyLogs[targetId] = result;
+        const idx = allDailyLogs.findIndex(l => l.target_id === targetId && l.day_ms === todayMs);
+        if (idx >= 0) allDailyLogs[idx] = result; else allDailyLogs.push(result);
+        renderDailyTargetsToday();
+        renderDailyCurrentWeek();
+      }
+    }
 
-    async function submitDailyGoal(weekStartMs) {
-      const val = document.getElementById('dg-input').value;
-      if (val === '' || isNaN(val)) return;
-      const value = Math.min(7, Math.max(0, parseInt(val)));
-      const result = await apiPost(`/api/habits/${currentHabit.id}/goals`, { week_start_ms: weekStartMs, value });
-      if (result) { dailyGoals[weekKey(getWeekMonday(weekStartMs))] = result; renderDailyGoal(); }
+    function renderDailyCurrentWeek() {
+      document.getElementById('daily-current').innerHTML = buildCirclesHTML(getCurrentWeekDays(), 'week-circles', true);
     }
 
     function toggleDailyWeek(key) {
@@ -1565,14 +1661,10 @@
     function renderDailyHistory() {
       const currentKey = weekKey(getWeekMonday(Date.now()));
       const weekSet = new Set();
-      for (const d of activeDays) {
-        const k = weekKey(getWeekMonday(d.day_ms));
+      for (const l of allDailyLogs) {
+        const k = weekKey(getWeekMonday(l.day_ms));
         if (k !== currentKey) weekSet.add(k);
       }
-      for (const k of Object.keys(dailyGoals)) {
-        if (k !== currentKey) weekSet.add(k);
-      }
-
       const el = document.getElementById('daily-history');
       if (weekSet.size === 0) { el.innerHTML = '<div class="no-history">No previous weeks yet.</div>'; return; }
 
@@ -1582,19 +1674,10 @@
         const weekDays = Array.from({ length: 7 }, (_, i) => {
           const d = new Date(mon); d.setDate(mon.getDate() + i); return d.getTime();
         });
-        const count = weekDays.filter(ms => isDayActive(ms)).length;
-        const weekGoal = dailyGoals[key];
-
-        const goalDot = weekGoal
-          ? `<span style="width:8px;height:8px;border-radius:50%;background:${count >= weekGoal.value ? '#008000' : '#E3963E'};flex-shrink:0"></span>`
-          : '';
-
-        const pastGoalHTML = weekGoal ? `
-          <div class="week-goal-inline" style="max-width:180px;margin:0.5rem auto">
-            <span class="goal-label">Goal</span>
-            <span class="goal-value">${weekGoal.value} days</span>
-            <span class="goal-progress" style="margin-left:auto">${count} / ${weekGoal.value}</span>
-          </div>` : '';
+        const completeDays = weekDays.filter(ms => isDayComplete(ms)).length;
+        const anyPartial   = weekDays.some(ms => isDayPartial(ms) && !isDayComplete(ms));
+        const dotColor = completeDays > 0 ? '#008000' : (anyPartial ? '#E3963E' : '');
+        const goalDot = dotColor ? `<span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></span>` : '';
 
         return `
         <div class="week-group">
@@ -1604,15 +1687,61 @@
               <span class="week-label">${weekRangeLabel(mon)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:0.6rem">
-              <span class="week-summary">${count} day${count !== 1 ? 's' : ''} active</span>
+              <span class="week-summary">${completeDays} day${completeDays !== 1 ? 's' : ''} complete</span>
               <span class="week-chevron${isOpen ? ' open' : ''}">▾</span>
             </div>
           </div>
           <div class="week-sessions" id="dweek-${key}" style="${isOpen ? '' : 'display:none'}">
-            ${buildCirclesHTML(weekDays, 'week-circles-history')}${pastGoalHTML}
+            ${buildCirclesHTML(weekDays, 'week-circles-history', true)}
           </div>
         </div>`;
       }).join('');
+    }
+
+    function renderDailyTargetsList() {
+      const el = document.getElementById('daily-targets-manage');
+      if (dailyTargets.length === 0) { el.innerHTML = ''; return; }
+      el.innerHTML = dailyTargets.map(t => {
+        const unitLabel = t.unit ? ` ${t.unit}` : '';
+        return `<div class="daily-target-row">
+          <span class="daily-target-row-name">${t.name}</span>
+          <span class="daily-target-row-meta">goal ${formatNum(t.target_value)}${unitLabel} · step ${formatNum(t.step)}${unitLabel}</span>
+          <button class="delete-btn" onclick="deleteDailyTarget(${t.id})" title="Delete">&times;</button>
+        </div>`;
+      }).join('');
+    }
+
+    async function createDailyTarget() {
+      const name  = document.getElementById('target-name').value.trim();
+      const unit  = document.getElementById('target-unit').value.trim();
+      const val   = parseFloat(document.getElementById('target-value').value);
+      const step  = parseFloat(document.getElementById('target-step').value);
+      const errEl = document.getElementById('add-target-error');
+      errEl.textContent = '';
+      if (!name)          { errEl.textContent = 'Name is required.'; return; }
+      if (!val || val <= 0) { errEl.textContent = 'Goal must be > 0.'; return; }
+      if (!step || step <= 0) { errEl.textContent = 'Step must be > 0.'; return; }
+      const result = await apiPost(`/api/habits/${currentHabit.id}/targets`, { name, unit, target_value: val, step });
+      if (result) {
+        dailyTargets.push(result);
+        document.getElementById('target-name').value = '';
+        document.getElementById('target-unit').value = '';
+        document.getElementById('target-value').value = '';
+        document.getElementById('target-step').value = '';
+        renderDailyTargetsToday();
+        renderDailyTargetsList();
+      }
+    }
+
+    async function deleteDailyTarget(id) {
+      await apiDelete(`/api/habits/${currentHabit.id}/targets/${id}`);
+      dailyTargets = dailyTargets.filter(t => t.id !== id);
+      allDailyLogs = allDailyLogs.filter(l => l.target_id !== id);
+      delete dailyLogs[id];
+      renderDailyTargetsToday();
+      renderDailyTargetsList();
+      renderDailyCurrentWeek();
+      renderDailyHistory();
     }
 
     // --- Todo style ---

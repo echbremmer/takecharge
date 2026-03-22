@@ -74,6 +74,23 @@ type TodoItem struct {
 	CreatedMs   int64  `json:"created_ms"`
 }
 
+type DailyTarget struct {
+	ID          int64   `json:"id"`
+	HabitID     int64   `json:"habit_id"`
+	Name        string  `json:"name"`
+	Unit        string  `json:"unit"`
+	TargetValue float64 `json:"target_value"`
+	Step        float64 `json:"step"`
+	Position    int     `json:"position"`
+}
+
+type DailyLog struct {
+	ID       int64   `json:"id"`
+	TargetID int64   `json:"target_id"`
+	DayMs    int64   `json:"day_ms"`
+	Value    float64 `json:"value"`
+}
+
 func initDB() {
 	var err error
 	db, err = sql.Open("sqlite3", "/data/takecharge.db?_journal_mode=WAL")
@@ -148,6 +165,24 @@ func initDB() {
 			checked       INTEGER NOT NULL DEFAULT 0,
 			week_start_ms INTEGER NOT NULL,
 			created_ms    INTEGER NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS daily_targets (
+			id           INTEGER PRIMARY KEY AUTOINCREMENT,
+			habit_id     INTEGER NOT NULL REFERENCES habits(id),
+			name         TEXT NOT NULL,
+			unit         TEXT NOT NULL DEFAULT '',
+			target_value REAL NOT NULL DEFAULT 1,
+			step         REAL NOT NULL DEFAULT 1,
+			position     INTEGER NOT NULL DEFAULT 0
+		);
+
+		CREATE TABLE IF NOT EXISTS daily_logs (
+			id        INTEGER PRIMARY KEY AUTOINCREMENT,
+			target_id INTEGER NOT NULL REFERENCES daily_targets(id),
+			day_ms    INTEGER NOT NULL,
+			value     REAL NOT NULL DEFAULT 0,
+			UNIQUE(target_id, day_ms)
 		);
 	`)
 	if err != nil {
@@ -462,6 +497,8 @@ func handleHabitDelete(w http.ResponseWriter, r *http.Request, habitID int64, us
 	db.Exec("DELETE FROM activity_days WHERE habit_id=?", habitID)
 	db.Exec("DELETE FROM week_goals WHERE habit_id=?", habitID)
 	db.Exec("DELETE FROM todo_items WHERE habit_id=?", habitID)
+	db.Exec("DELETE FROM daily_logs WHERE target_id IN (SELECT id FROM daily_targets WHERE habit_id=?)", habitID)
+	db.Exec("DELETE FROM daily_targets WHERE habit_id=?", habitID)
 	db.Exec("DELETE FROM habits WHERE id=?", habitID)
 	w.WriteHeader(204)
 }
@@ -528,6 +565,14 @@ func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 		} else {
 			handleHabitTodoByID(w, r, habitID, subID)
 		}
+	case "targets":
+		if subID == "" {
+			handleDailyTargets(w, r, habitID)
+		} else {
+			handleDailyTargetByID(w, r, habitID, subID)
+		}
+	case "logs":
+		handleDailyLogs(w, r, habitID)
 	default:
 		http.Error(w, "not found", 404)
 	}
@@ -914,6 +959,159 @@ func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, habitID int64, 
 			return
 		}
 		w.WriteHeader(204)
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
+// GET, POST /api/habits/:id/targets
+func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query(
+			"SELECT id, habit_id, name, unit, target_value, step, position FROM daily_targets WHERE habit_id=? ORDER BY position, id",
+			habitID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer rows.Close()
+		targets := []DailyTarget{}
+		for rows.Next() {
+			var t DailyTarget
+			rows.Scan(&t.ID, &t.HabitID, &t.Name, &t.Unit, &t.TargetValue, &t.Step, &t.Position)
+			targets = append(targets, t)
+		}
+		writeJSON(w, 200, targets)
+
+	case http.MethodPost:
+		var body struct {
+			Name        string  `json:"name"`
+			Unit        string  `json:"unit"`
+			TargetValue float64 `json:"target_value"`
+			Step        float64 `json:"step"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		body.Name = strings.TrimSpace(body.Name)
+		if body.Name == "" || body.TargetValue <= 0 || body.Step <= 0 {
+			http.Error(w, "name, target_value and step are required and must be > 0", 400)
+			return
+		}
+		var maxPos int
+		db.QueryRow("SELECT COALESCE(MAX(position), -1) FROM daily_targets WHERE habit_id=?", habitID).Scan(&maxPos)
+		res, err := db.Exec(
+			"INSERT INTO daily_targets (habit_id, name, unit, target_value, step, position) VALUES (?, ?, ?, ?, ?, ?)",
+			habitID, body.Name, body.Unit, body.TargetValue, body.Step, maxPos+1,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		id, _ := res.LastInsertId()
+		writeJSON(w, 201, DailyTarget{
+			ID: id, HabitID: habitID, Name: body.Name, Unit: body.Unit,
+			TargetValue: body.TargetValue, Step: body.Step, Position: maxPos + 1,
+		})
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
+// DELETE /api/habits/:id/targets/:tid
+func handleDailyTargetByID(w http.ResponseWriter, r *http.Request, habitID int64, id string) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	db.Exec("DELETE FROM daily_logs WHERE target_id=?", id)
+	res, err := db.Exec("DELETE FROM daily_targets WHERE id=? AND habit_id=?", id, habitID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		http.Error(w, "not found", 404)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+// GET, POST /api/habits/:id/logs
+// GET supports optional ?day=<ms> query param to filter to one day
+func handleDailyLogs(w http.ResponseWriter, r *http.Request, habitID int64) {
+	switch r.Method {
+	case http.MethodGet:
+		day := r.URL.Query().Get("day")
+		var rows *sql.Rows
+		var err error
+		if day != "" {
+			rows, err = db.Query(
+				`SELECT dl.id, dl.target_id, dl.day_ms, dl.value
+				 FROM daily_logs dl
+				 JOIN daily_targets dt ON dt.id = dl.target_id
+				 WHERE dt.habit_id=? AND dl.day_ms=?`,
+				habitID, day,
+			)
+		} else {
+			rows, err = db.Query(
+				`SELECT dl.id, dl.target_id, dl.day_ms, dl.value
+				 FROM daily_logs dl
+				 JOIN daily_targets dt ON dt.id = dl.target_id
+				 WHERE dt.habit_id=?
+				 ORDER BY dl.day_ms DESC`,
+				habitID,
+			)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer rows.Close()
+		logs := []DailyLog{}
+		for rows.Next() {
+			var l DailyLog
+			rows.Scan(&l.ID, &l.TargetID, &l.DayMs, &l.Value)
+			logs = append(logs, l)
+		}
+		writeJSON(w, 200, logs)
+
+	case http.MethodPost:
+		var body struct {
+			TargetID int64   `json:"target_id"`
+			DayMs    int64   `json:"day_ms"`
+			Value    float64 `json:"value"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		// verify target belongs to this habit
+		var exists int
+		db.QueryRow("SELECT 1 FROM daily_targets WHERE id=? AND habit_id=?", body.TargetID, habitID).Scan(&exists)
+		if exists == 0 {
+			http.Error(w, "target not found", 404)
+			return
+		}
+		res, err := db.Exec(
+			"INSERT INTO daily_logs (target_id, day_ms, value) VALUES (?, ?, ?) ON CONFLICT(target_id, day_ms) DO UPDATE SET value=excluded.value",
+			body.TargetID, body.DayMs, body.Value,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		id, _ := res.LastInsertId()
+		if id == 0 {
+			db.QueryRow("SELECT id FROM daily_logs WHERE target_id=? AND day_ms=?", body.TargetID, body.DayMs).Scan(&id)
+		}
+		writeJSON(w, 200, DailyLog{ID: id, TargetID: body.TargetID, DayMs: body.DayMs, Value: body.Value})
 
 	default:
 		http.Error(w, "method not allowed", 405)
