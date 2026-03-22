@@ -1025,22 +1025,61 @@ func handleDailyTargets(w http.ResponseWriter, r *http.Request, habitID int64) {
 
 // DELETE /api/habits/:id/targets/:tid
 func handleDailyTargetByID(w http.ResponseWriter, r *http.Request, habitID int64, id string) {
-	if r.Method != http.MethodDelete {
+	switch r.Method {
+	case http.MethodPut:
+		var body struct {
+			Name        string  `json:"name"`
+			Unit        string  `json:"unit"`
+			TargetValue float64 `json:"target_value"`
+			Step        float64 `json:"step"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		body.Name = strings.TrimSpace(body.Name)
+		if body.Name == "" || body.TargetValue <= 0 || body.Step <= 0 {
+			http.Error(w, "name, target_value and step are required and must be > 0", 400)
+			return
+		}
+		res, err := db.Exec(
+			"UPDATE daily_targets SET name=?, unit=?, target_value=?, step=? WHERE id=? AND habit_id=?",
+			body.Name, body.Unit, body.TargetValue, body.Step, id, habitID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			http.Error(w, "not found", 404)
+			return
+		}
+		idInt, _ := strconv.ParseInt(id, 10, 64)
+		var pos int
+		db.QueryRow("SELECT position FROM daily_targets WHERE id=?", id).Scan(&pos)
+		writeJSON(w, 200, DailyTarget{
+			ID: idInt, HabitID: habitID, Name: body.Name, Unit: body.Unit,
+			TargetValue: body.TargetValue, Step: body.Step, Position: pos,
+		})
+
+	case http.MethodDelete:
+		db.Exec("DELETE FROM daily_logs WHERE target_id=?", id)
+		res, err := db.Exec("DELETE FROM daily_targets WHERE id=? AND habit_id=?", id, habitID)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			http.Error(w, "not found", 404)
+			return
+		}
+		w.WriteHeader(204)
+
+	default:
 		http.Error(w, "method not allowed", 405)
-		return
 	}
-	db.Exec("DELETE FROM daily_logs WHERE target_id=?", id)
-	res, err := db.Exec("DELETE FROM daily_targets WHERE id=? AND habit_id=?", id, habitID)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		http.Error(w, "not found", 404)
-		return
-	}
-	w.WriteHeader(204)
 }
 
 // GET, POST /api/habits/:id/logs
