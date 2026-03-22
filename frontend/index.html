@@ -231,6 +231,9 @@
     .goal-label { font-size: 0.65rem; color: var(--on-surface-muted); text-transform: uppercase; letter-spacing: 0.08em; flex-shrink: 0; }
     .goal-value { font-family: 'Manrope', sans-serif; font-size: 0.9rem; font-weight: 700; color: var(--on-surface); }
     .goal-progress { font-size: 0.8rem; color: var(--primary); margin-left: auto; font-weight: 500; }
+    .goal-left { font-size: 0.8rem; font-weight: 600; }
+    .goal-left.remaining { color: var(--on-surface-muted); }
+    .goal-left.reached { color: var(--primary); }
     .goal-empty { font-size: 0.85rem; color: var(--on-surface-muted); }
     .goal-unit { font-size: 0.85rem; color: var(--on-surface-muted); }
 
@@ -984,12 +987,18 @@
           userHabits.forEach(h => {
             const snap = dashSnapshots[h.id];
             if (h.style_slug !== 'timer' || !snap?.activeStart) return;
-            const activeSec = Math.floor((Date.now() - snap.activeStart) / 1000);
-            const weekMs    = snap.weekSessionsMs + (Date.now() - snap.activeStart);
+            const activeDurMs = Date.now() - snap.activeStart;
+            const weekMs      = snap.weekSessionsMs + activeDurMs;
             const ae = document.getElementById(`dash-active-${h.id}`);
             const we = document.getElementById(`dash-week-${h.id}`);
-            if (ae) ae.textContent = formatDuration(activeSec * 1000);
+            const le = document.getElementById(`dash-left-${h.id}`);
+            if (ae) ae.textContent = formatDuration(activeDurMs);
             if (we) we.textContent = formatDuration(weekMs);
+            if (le && snap.weekGoal) {
+              const leftMs  = Math.max(0, snap.weekGoal.value - weekMs);
+              le.textContent = leftMs === 0 ? '✓ Goal reached' : formatGoalTime(leftMs);
+              le.style.color = leftMs === 0 ? 'var(--primary)' : 'inherit';
+            }
           });
         }, 1000);
       }
@@ -999,14 +1008,17 @@
       const weekStart = weekDays[0], weekEnd = weekDays[6] + 86400000;
       try {
         if (habit.style_slug === 'timer') {
-          const [active, sessions] = await Promise.all([
+          const [active, sessions, goals] = await Promise.all([
             apiGet(`/api/habits/${habit.id}/active`),
             apiGet(`/api/habits/${habit.id}/sessions`),
+            apiGet(`/api/habits/${habit.id}/goals`),
           ]);
           const weekSessionsMs = (sessions || [])
             .filter(s => s.start >= weekStart && s.start < weekEnd)
             .reduce((sum, s) => sum + s.duration, 0);
-          return { activeStart: active ? active.start : null, weekSessionsMs };
+          const curKey   = weekKey(getWeekMonday(Date.now()));
+          const weekGoal = (goals || []).find(g => weekKey(getWeekMonday(g.week_start_ms)) === curKey) || null;
+          return { activeStart: active ? active.start : null, weekSessionsMs, weekGoal };
         }
         if (habit.style_slug === 'daily') {
           const [targets, logs] = await Promise.all([
@@ -1029,17 +1041,23 @@
       let content = '';
       if (habit.style_slug === 'timer' && data) {
         const activeDurMs = data.activeStart ? Date.now() - data.activeStart : 0;
-        const weekMs = data.weekSessionsMs + activeDurMs;
-        const titleDot = data.activeStart ? `<span class="dash-active-dot"></span>` : '';
-        const activeRow = data.activeStart
+        const weekMs      = data.weekSessionsMs + activeDurMs;
+        const goalValue   = data.weekGoal ? data.weekGoal.value : null;
+        const leftMs      = goalValue !== null ? Math.max(0, goalValue - weekMs) : null;
+        const reached     = leftMs === 0;
+        const titleDot    = data.activeStart ? `<span class="dash-active-dot"></span>` : '';
+        const activeRow   = data.activeStart
           ? `<div class="dash-timer-row">
                <span class="dash-timer-active" id="dash-active-${habit.id}">${formatDuration(activeDurMs)}</span>
                <span class="dash-timer-total">Active</span>
              </div>`
           : `<div class="dash-empty">Not active</div>`;
+        const goalRow = goalValue !== null
+          ? `<div class="dash-timer-week-label" style="margin-top:0.4rem">${reached ? '' : 'Time left · '}<span id="dash-left-${habit.id}" style="font-weight:600;color:${reached ? 'var(--primary)' : 'inherit'}">${reached ? '✓ Goal reached' : formatGoalTime(leftMs)}</span></div>`
+          : '';
         content = `${activeRow}
-          <div class="dash-timer-week-label">This week</div>
-          <div class="dash-timer-total" id="dash-week-${habit.id}">${formatDuration(weekMs)}</div>`;
+          <div class="dash-timer-week-label">This week — <span id="dash-week-${habit.id}">${formatDuration(weekMs)}</span></div>
+          ${goalRow}`;
         return `<button class="dash-card" onclick="switchHabit(${habit.id})">
           <div class="dash-card-title">${titleDot}${habit.name}</div>${content}</button>`;
       }
@@ -1301,8 +1319,19 @@
 
     // --- Timer helpers ---
     function updateTimer() {
-      if (activeStart) {
-        document.getElementById('timer').textContent = formatDuration(Date.now() - activeStart);
+      if (!activeStart) return;
+      document.getElementById('timer').textContent = formatDuration(Date.now() - activeStart);
+      const leftEl = document.getElementById('timer-goal-left');
+      if (leftEl) {
+        const curKey     = weekKey(getWeekMonday(Date.now()));
+        const goal       = timerGoals[curKey];
+        const weekDoneMs = timerSessions
+          .filter(s => weekKey(getWeekMonday(s.start)) === curKey)
+          .reduce((sum, s) => sum + s.duration, 0);
+        const totalMs = weekDoneMs + (Date.now() - activeStart);
+        const leftMs  = Math.max(0, goal.value - totalMs);
+        leftEl.textContent  = leftMs === 0 ? '✓ Goal reached' : formatGoalTime(leftMs) + ' left';
+        leftEl.className    = 'goal-left ' + (leftMs === 0 ? 'reached' : 'remaining');
       }
     }
 
@@ -1437,9 +1466,15 @@
         .filter(s => weekKey(getWeekMonday(s.start)) === currentKey)
         .reduce((sum, s) => sum + s.duration, 0);
 
+      const activeDurMs = activeStart ? Date.now() - activeStart : 0;
+      const totalMs     = weekTotalMs + activeDurMs;
+      const leftMs      = goalValue !== null ? Math.max(0, goalValue - totalMs) : null;
+      const reached     = leftMs === 0;
+
       const progressHTML = goalValue !== null
         ? `<span class="goal-value">${formatGoalTime(goalValue)}</span>
-           <span class="goal-progress">${formatDuration(weekTotalMs)} so far</span>`
+           <span class="goal-progress">${formatDuration(totalMs)} done</span>
+           <span class="goal-left ${reached ? 'reached' : 'remaining'}" id="timer-goal-left">${reached ? '✓ Goal reached' : formatGoalTime(leftMs) + ' left'}</span>`
         : `<span class="goal-empty">No goal set</span>`;
 
       const { d, h, m } = goalValue !== null ? msToGoalParts(goalValue) : { d: 0, h: 16, m: 0 };
