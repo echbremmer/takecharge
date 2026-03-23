@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../main.dart';
 
 class HabitCard extends StatelessWidget {
@@ -16,80 +17,49 @@ class HabitCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              _typeIcon(type),
-              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       habit['name'] ?? '',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppTheme.sageDark,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.onSurfaceVar,
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _typeLabel(type),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.textLight,
-                          ),
+                    const SizedBox(height: 6),
+                    // Type badge — same style as settings screen
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryFixed,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        type.toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                          color: AppTheme.primary,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppTheme.sageLight),
+              const Icon(Icons.chevron_right,
+                  size: 18, color: AppTheme.onSurfaceMuted),
             ],
           ),
         ),
       ),
     );
-  }
-
-  Widget _typeIcon(String type) {
-    IconData icon;
-    Color color;
-    switch (type) {
-      case 'timer':
-        icon = Icons.timer_outlined;
-        color = AppTheme.sageMid;
-        break;
-      case 'daily':
-        icon = Icons.today_outlined;
-        color = AppTheme.accent;
-        break;
-      case 'todo':
-        icon = Icons.checklist_outlined;
-        color = AppTheme.sageDark;
-        break;
-      default:
-        icon = Icons.track_changes;
-        color = AppTheme.sageLight;
-    }
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, color: color, size: 24),
-    );
-  }
-
-  String _typeLabel(String type) {
-    switch (type) {
-      case 'timer':
-        return 'Fasting timer';
-      case 'daily':
-        return 'Daily targets';
-      case 'todo':
-        return 'To-do list';
-      default:
-        return type;
-    }
   }
 }
