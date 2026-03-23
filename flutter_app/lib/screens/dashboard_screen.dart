@@ -16,6 +16,11 @@ class DashboardScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('TAKECHARGE'),
+        // Slight shadow to match web top-bar border
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: const Color(0x26C5C8BE)),
+        ),
       ),
       body: habits.when(
         loading: () => const Center(child: CircularProgressIndicator()),

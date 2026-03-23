@@ -28,7 +28,10 @@ dependencies:
   # Image picker (profile photo)
   image_picker: ^1.1.2
 
-  # flutter_secure_storage: ^9.0.0  # Not needed — cookie auth only
+  # Flutter_secure_storage not needed — cookie auth only
+
+  # Fonts (Manrope + Plus Jakarta Sans — matching the web frontend exactly)
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
