@@ -14,28 +14,17 @@ final habitsProvider = FutureProvider<List<dynamic>>((ref) async {
   return habitsApi.list();
 });
 
-// Active fast (timer habit)
-final activeFastProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  ref.watch(habitsRefreshProvider);
-  return habitsApi.getActive();
-});
+// These providers require a habitId — use FutureProvider.family
+// or call habitsApi directly in the screen (as TimerHabitScreen does).
 
-// Daily targets per habit
 final dailyTargetsProvider =
     FutureProvider.family<List<dynamic>, int>((ref, habitId) async {
   ref.watch(habitsRefreshProvider);
   return habitsApi.getTargets(habitId);
 });
 
-// Daily logs per habit (all days)
 final dailyLogsProvider =
     FutureProvider.family<List<dynamic>, int>((ref, habitId) async {
   ref.watch(habitsRefreshProvider);
   return habitsApi.getLogs(habitId);
-});
-
-// Sessions (timer habit history)
-final sessionsProvider = FutureProvider<List<dynamic>>((ref) async {
-  ref.watch(habitsRefreshProvider);
-  return habitsApi.getSessions();
 });

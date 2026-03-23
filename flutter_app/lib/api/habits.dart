@@ -3,6 +3,7 @@ import 'client.dart';
 class HabitsApi {
   final _client = ApiClient.instance;
 
+  // ── Habits list ───────────────────────────────────────────────────────────
   Future<List<dynamic>> list() async {
     final res = await _client.get('/api/habits');
     return res.data as List<dynamic>;
@@ -17,30 +18,49 @@ class HabitsApi {
     await _client.delete('/api/habits/$id');
   }
 
-  // --- Timer habit ---
-  Future<Map<String, dynamic>?> getActive() async {
+  // ── Timer habit ───────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> getActive(int habitId) async {
     try {
-      final res = await _client.get('/api/active');
+      final res = await _client.get('/api/habits/$habitId/active');
       return res.data as Map<String, dynamic>;
     } catch (_) {
-      return null; // 404 = no active fast
+      return null; // 404 = no active session
     }
   }
 
-  Future<void> startFast(int startMs) async {
-    await _client.post('/api/active', data: {'start': startMs});
+  Future<void> startActive(int habitId, int startMs) async {
+    await _client.post('/api/habits/$habitId/active', data: {'start': startMs});
   }
 
-  Future<void> stopFast() async {
-    await _client.delete('/api/active');
+  Future<void> adjustActive(int habitId, int newStartMs) async {
+    await _client.put('/api/habits/$habitId/active', data: {'start': newStartMs});
   }
 
-  Future<List<dynamic>> getSessions() async {
-    final res = await _client.get('/api/sessions');
+  Future<void> stopActive(int habitId) async {
+    await _client.delete('/api/habits/$habitId/active');
+  }
+
+  Future<List<dynamic>> getSessions(int habitId) async {
+    final res = await _client.get('/api/habits/$habitId/sessions');
     return res.data as List<dynamic>;
   }
 
-  // --- Daily habit ---
+  Future<void> deleteSession(int habitId, int sessionId) async {
+    await _client.delete('/api/habits/$habitId/sessions/$sessionId');
+  }
+
+  Future<List<dynamic>> getGoals(int habitId) async {
+    final res = await _client.get('/api/habits/$habitId/goals');
+    return res.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> setGoal(int habitId, int weekStartMs, int valueMs) async {
+    final res = await _client.post('/api/habits/$habitId/goals',
+        data: {'week_start_ms': weekStartMs, 'value': valueMs});
+    return res.data as Map<String, dynamic>;
+  }
+
+  // ── Daily habit ───────────────────────────────────────────────────────────
   Future<List<dynamic>> getTargets(int habitId) async {
     final res = await _client.get('/api/habits/$habitId/targets');
     return res.data as List<dynamic>;
@@ -60,10 +80,8 @@ class HabitsApi {
   }
 
   Future<List<dynamic>> getLogs(int habitId, {int? dayMs}) async {
-    final res = await _client.get(
-      '/api/habits/$habitId/logs',
-      params: dayMs != null ? {'day': dayMs} : null,
-    );
+    final res = await _client.get('/api/habits/$habitId/logs',
+        params: dayMs != null ? {'day': dayMs} : null);
     return res.data as List<dynamic>;
   }
 
@@ -72,12 +90,10 @@ class HabitsApi {
         data: {'target_id': targetId, 'day_ms': dayMs, 'delta': delta});
   }
 
-  // --- Todo habit ---
+  // ── Todo habit ────────────────────────────────────────────────────────────
   Future<List<dynamic>> getTodos(int habitId, {int? weekMs}) async {
-    final res = await _client.get(
-      '/api/habits/$habitId/todos',
-      params: weekMs != null ? {'week': weekMs} : null,
-    );
+    final res = await _client.get('/api/habits/$habitId/todos',
+        params: weekMs != null ? {'week': weekMs} : null);
     return res.data as List<dynamic>;
   }
 
