@@ -28,6 +28,9 @@ class ApiClient {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),
       contentType: 'application/json',
+      // Required on web: tells the browser's XHR to include cookies on
+      // cross-origin requests (Flutter dev server ≠ Go backend port).
+      extra: {'withCredentials': true},
     );
 
     dio = Dio(options);
@@ -40,7 +43,6 @@ class ApiClient {
       );
       dio.interceptors.add(CookieManager(cookieJar));
     }
-    // On web the browser handles cookies automatically (HttpOnly cookies work natively)
   }
 
   // Convenience helpers
