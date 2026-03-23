@@ -10,7 +10,7 @@ class HabitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final type = (habit['type'] as String? ?? '').toUpperCase();
+    final type = (habit['style_slug'] as String? ?? habit['type'] as String? ?? '').toUpperCase();
 
     return Card(
       child: InkWell(

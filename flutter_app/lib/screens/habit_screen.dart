@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../providers/habits_provider.dart';
+import 'daily_habit_screen.dart';
 import 'timer_habit_screen.dart';
 
 class HabitScreen extends ConsumerWidget {
@@ -34,12 +35,14 @@ class HabitScreen extends ConsumerWidget {
           );
         }
 
-        final type = habit['type'] as String? ?? '';
+        final type = habit['style_slug'] as String? ?? habit['type'] as String? ?? '';
         final name = habit['name'] as String? ?? '';
 
         switch (type) {
           case 'timer':
             return TimerHabitScreen(habitId: habitId, habitName: name);
+          case 'daily':
+            return DailyHabitScreen(habitId: habitId, habitName: name);
 
           default:
             // Daily and Todo screens — coming soon
@@ -57,7 +60,7 @@ class HabitScreen extends ConsumerWidget {
                           color: AppTheme.onSurface)),
                   const SizedBox(height: 8),
                   Text(
-                    '${type[0].toUpperCase()}${type.substring(1)} habit screen coming soon',
+                    '${type.isEmpty ? 'This' : '${type[0].toUpperCase()}${type.substring(1)}'} habit screen coming soon',
                     style: GoogleFonts.plusJakartaSans(
                         fontSize: 14, color: AppTheme.onSurfaceMuted),
                   ),

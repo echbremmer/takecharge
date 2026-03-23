@@ -85,9 +85,9 @@ class HabitsApi {
     return res.data as List<dynamic>;
   }
 
-  Future<void> logDelta(int habitId, int targetId, int dayMs, int delta) async {
+  Future<void> logValue(int habitId, int targetId, int dayMs, double value) async {
     await _client.post('/api/habits/$habitId/logs',
-        data: {'target_id': targetId, 'day_ms': dayMs, 'delta': delta});
+        data: {'target_id': targetId, 'day_ms': dayMs, 'value': value});
   }
 
   // ── Todo habit ────────────────────────────────────────────────────────────
