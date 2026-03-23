@@ -39,6 +39,15 @@ class ApiClient {
     }
   }
 
+  // Called by auth layer after login/signup with the token from the response body.
+  Future<void> setSessionToken(String token) =>
+      _SessionInterceptor._storage.write(
+          key: _SessionInterceptor._key, value: token);
+
+  // Called by auth layer on logout.
+  Future<void> clearSessionToken() =>
+      _SessionInterceptor._storage.delete(key: _SessionInterceptor._key);
+
   // Convenience helpers
   Future<Response> get(String path, {Map<String, dynamic>? params}) =>
       dio.get(path, queryParameters: params);
@@ -72,36 +81,4 @@ class _SessionInterceptor extends Interceptor {
     handler.next(options);
   }
 
-  @override
-  Future<void> onResponse(
-      Response response, ResponseInterceptorHandler handler) async {
-    await _syncToken(response.headers);
-    handler.next(response);
-  }
-
-  @override
-  Future<void> onError(
-      DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response != null) {
-      await _syncToken(err.response!.headers);
-    }
-    handler.next(err);
-  }
-
-  Future<void> _syncToken(Headers headers) async {
-    final cookies = headers['set-cookie'];
-    if (cookies == null) return;
-    for (final cookie in cookies) {
-      final match = RegExp(r'session=([^;]*)').firstMatch(cookie);
-      if (match != null) {
-        final token = match.group(1) ?? '';
-        if (token.isEmpty) {
-          await _storage.delete(key: _key);
-        } else {
-          await _storage.write(key: _key, value: token);
-        }
-        break;
-      }
-    }
-  }
 }

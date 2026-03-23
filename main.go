@@ -302,7 +302,11 @@ func handleAuthSignup(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-	writeJSON(w, 201, User{ID: userID, Username: body.Username})
+	writeJSON(w, 201, struct {
+		ID       int64  `json:"id"`
+		Username string `json:"username"`
+		Token    string `json:"token,omitempty"`
+	}{ID: userID, Username: body.Username, Token: token})
 }
 
 func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -347,7 +351,11 @@ func handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-	writeJSON(w, 200, User{ID: userID, Username: body.Username})
+	writeJSON(w, 200, struct {
+		ID       int64  `json:"id"`
+		Username string `json:"username"`
+		Token    string `json:"token,omitempty"`
+	}{ID: userID, Username: body.Username, Token: token})
 }
 
 func handleAuthLogout(w http.ResponseWriter, r *http.Request) {

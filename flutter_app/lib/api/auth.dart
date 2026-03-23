@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'client.dart';
 
 class AuthApi {
@@ -12,17 +11,28 @@ class AuthApi {
   Future<Map<String, dynamic>> login(String username, String password) async {
     final res = await _client.post('/api/auth/login',
         data: {'username': username, 'password': password});
-    return res.data as Map<String, dynamic>;
+    final data = res.data as Map<String, dynamic>;
+    final token = data['token'] as String?;
+    if (token != null && token.isNotEmpty) {
+      await _client.setSessionToken(token);
+    }
+    return data;
   }
 
   Future<Map<String, dynamic>> signup(String username, String password) async {
     final res = await _client.post('/api/auth/signup',
         data: {'username': username, 'password': password});
-    return res.data as Map<String, dynamic>;
+    final data = res.data as Map<String, dynamic>;
+    final token = data['token'] as String?;
+    if (token != null && token.isNotEmpty) {
+      await _client.setSessionToken(token);
+    }
+    return data;
   }
 
   Future<void> logout() async {
     await _client.post('/api/auth/logout');
+    await _client.clearSessionToken();
   }
 }
 
