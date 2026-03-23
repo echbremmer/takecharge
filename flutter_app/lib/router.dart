@@ -7,6 +7,7 @@ import 'screens/auth_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/habit_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/shell_screen.dart';
 
 class _AuthListenable extends ChangeNotifier {
@@ -66,6 +67,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile',
             builder: (_, __) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => const SettingsScreen(),
           ),
           GoRoute(
             path: '/habit/:id',
