@@ -1,8 +1,6 @@
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // API base is configurable at build time via --dart-define=API_BASE=https://...
 // Defaults to same-origin (web) or localhost (dev mobile).
@@ -19,8 +17,6 @@ class ApiClient {
   late final String baseUrl;
 
   Future<void> init() async {
-    // Dev default: always localhost:8080.
-    // Production: pass --dart-define=API_BASE= (empty = same-origin) or a full URL.
     baseUrl = _defaultBase.isNotEmpty ? _defaultBase : 'http://localhost:8080';
 
     final options = BaseOptions(
@@ -35,13 +31,11 @@ class ApiClient {
 
     dio = Dio(options);
 
-    // On non-web platforms use a persistent CookieJar so session survives app restarts
+    // On non-web platforms, manage the session token manually via secure
+    // storage. This is more reliable than PersistCookieJar across different
+    // hosts and protocols (HTTP dev vs HTTPS production).
     if (!kIsWeb) {
-      final dir = await getApplicationDocumentsDirectory();
-      final cookieJar = PersistCookieJar(
-        storage: FileStorage('${dir.path}/.cookies/'),
-      );
-      dio.interceptors.add(CookieManager(cookieJar));
+      dio.interceptors.add(_SessionInterceptor());
     }
   }
 
@@ -59,4 +53,55 @@ class ApiClient {
 
   Future<Response> postForm(String path, FormData formData) =>
       dio.post(path, data: formData);
+}
+
+// Intercepts every request/response to manage the session cookie manually.
+// On request: reads the stored token and injects it as a Cookie header.
+// On response: looks for Set-Cookie and saves or clears the session token.
+class _SessionInterceptor extends Interceptor {
+  static const _storage = FlutterSecureStorage();
+  static const _key = 'session_token';
+
+  @override
+  Future<void> onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
+    final token = await _storage.read(key: _key);
+    if (token != null && token.isNotEmpty) {
+      options.headers['Cookie'] = 'session=$token';
+    }
+    handler.next(options);
+  }
+
+  @override
+  Future<void> onResponse(
+      Response response, ResponseInterceptorHandler handler) async {
+    await _syncToken(response.headers);
+    handler.next(response);
+  }
+
+  @override
+  Future<void> onError(
+      DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response != null) {
+      await _syncToken(err.response!.headers);
+    }
+    handler.next(err);
+  }
+
+  Future<void> _syncToken(Headers headers) async {
+    final cookies = headers['set-cookie'];
+    if (cookies == null) return;
+    for (final cookie in cookies) {
+      final match = RegExp(r'session=([^;]*)').firstMatch(cookie);
+      if (match != null) {
+        final token = match.group(1) ?? '';
+        if (token.isEmpty) {
+          await _storage.delete(key: _key);
+        } else {
+          await _storage.write(key: _key, value: token);
+        }
+        break;
+      }
+    }
+  }
 }
