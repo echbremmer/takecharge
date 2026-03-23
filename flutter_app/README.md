@@ -1,17 +1,68 @@
-# takecharge
+# TakeCharge — Flutter App
 
-A new Flutter project.
+Mobile app for [TakeCharge](../README.md), a personal habit tracker. Supports timer habits, daily targets, and todo lists. The app communicates with the Go backend over HTTP — the Docker container must be running before you launch the app.
 
-## Getting Started
+## Prerequisites
 
-This project is a starting point for a Flutter application.
+- [Flutter](https://docs.flutter.dev/get-started/install) SDK (stable channel)
+- Android emulator / device, or iOS device (iOS requires macOS + Xcode)
+- TakeCharge Docker container running on the same network
 
-A few resources to get you started if this is your first Flutter project:
+## 1. Start the backend
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+From the repo root:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+docker build --network host -t takecharge .
+docker run -d --network host -v takecharge-data:/data --name takecharge takecharge
+```
+
+The backend listens on port `8080`. On an Android emulator, `localhost:8080` reaches the host machine directly. On a physical device, replace `localhost` with your machine's local IP (see below).
+
+## 2. Install dependencies
+
+```bash
+flutter pub get
+```
+
+## 3. Run the app
+
+**Android emulator (default):**
+```bash
+flutter run
+```
+
+**Specific device:**
+```bash
+flutter devices          # list available devices
+flutter run -d <device-id>
+```
+
+**Physical device on a local network:**
+
+Pass your machine's local IP as the API base URL:
+
+```bash
+flutter run --dart-define=API_BASE=http://192.168.x.x:8080
+```
+
+## Project structure
+
+```
+lib/
+  api/          # HTTP client (Dio) and API methods
+  providers/    # Riverpod state providers
+  screens/      # One file per screen
+  widgets/      # Shared UI components
+  main.dart     # App entry, theme, startup auth check
+  router.dart   # go_router navigation
+```
+
+## Key packages
+
+| Package | Purpose |
+|---|---|
+| `flutter_riverpod` | State management |
+| `go_router` | Navigation |
+| `dio` + `dio_cookie_manager` | HTTP requests + cookie-based auth |
+| `google_fonts` | Manrope + Plus Jakarta Sans fonts |
