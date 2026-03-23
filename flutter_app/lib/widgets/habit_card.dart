@@ -10,7 +10,7 @@ class HabitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final type = habit['type'] as String? ?? '';
+    final type = (habit['type'] as String? ?? '').toUpperCase();
 
     return Card(
       child: InkWell(
@@ -20,42 +20,36 @@ class HabitCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
+              // Habit name
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      habit['name'] ?? '',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.onSurfaceVar,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    // Type badge — same style as settings screen
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryFixed,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        type.toUpperCase(),
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  habit['name'] ?? '',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.onSurfaceVar,
+                  ),
                 ),
               ),
-              const Icon(Icons.chevron_right,
-                  size: 18, color: AppTheme.onSurfaceMuted),
+              // Type badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryFixed,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  type,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                    color: AppTheme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, size: 18, color: AppTheme.onSurfaceMuted),
             ],
           ),
         ),
