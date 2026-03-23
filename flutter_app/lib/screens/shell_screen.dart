@@ -51,7 +51,11 @@ class _ShellScreenState extends ConsumerState<ShellScreen>
     _menuCtrl.reverse();
   }
 
-  int get _navIndex => widget.location.startsWith('/profile') ? 1 : 0;
+  int get _navIndex {
+    if (widget.location.startsWith('/profile')) return 1;
+    if (widget.location.startsWith('/settings')) return 2;
+    return 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +114,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen>
           _closeMenu();
           if (i == 0) context.go('/');
           if (i == 1) context.go('/profile');
+          if (i == 2) context.go('/settings');
         },
       ),
     );
@@ -247,6 +252,11 @@ class _BottomNav extends StatelessWidget {
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'PROFILE',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'SETTINGS',
           ),
         ],
       ),
