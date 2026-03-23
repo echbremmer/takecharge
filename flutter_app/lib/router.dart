@@ -22,24 +22,23 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     refreshListenable: notifier,
     redirect: (context, state) {
-      final authState = ref.read(authProvider);
-      final isLoading = authState.status == AuthStatus.loading;
-      final isAuthed = authState.status == AuthStatus.authenticated;
+      final auth = ref.read(authProvider);
       final path = state.uri.path;
 
-      // Show loading screen while checking auth
-      if (isLoading) return path == '/loading' ? null : '/loading';
-
-      // Send unauthenticated users to login
-      if (!isAuthed && path != '/auth') return '/auth';
-
-      // Send authenticated users away from auth/loading screens
-      if (isAuthed && (path == '/auth' || path == '/loading')) return '/';
-
+      if (auth.status == AuthStatus.loading) {
+        return path == '/loading' ? null : '/loading';
+      }
+      if (auth.status == AuthStatus.unauthenticated && path != '/auth') {
+        return '/auth';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          (path == '/auth' || path == '/loading')) {
+        return '/';
+      }
       return null;
     },
     routes: [
-      // Loading splash
+      // Loading splash (outside shell)
       GoRoute(
         path: '/loading',
         builder: (_, __) => const Scaffold(
@@ -53,16 +52,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const AuthScreen(),
       ),
 
-      // Habit detail (outside shell — no bottom nav)
-      GoRoute(
-        path: '/habit/:id',
-        builder: (context, state) {
-          final id = int.parse(state.pathParameters['id']!);
-          return HabitScreen(habitId: id);
-        },
-      ),
-
-      // Main app shell (with bottom nav)
+      // Main app shell — AppBar + bottom nav wraps all authenticated screens
       ShellRoute(
         builder: (context, state, child) => ShellScreen(
           location: state.uri.path,
@@ -76,6 +66,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile',
             builder: (_, __) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: '/habit/:id',
+            builder: (context, state) {
+              final id = int.parse(state.pathParameters['id']!);
+              return HabitScreen(habitId: id);
+            },
           ),
         ],
       ),
