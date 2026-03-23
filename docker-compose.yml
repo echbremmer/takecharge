@@ -4,8 +4,5 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - takecharge-data:/data
+      - /home/alice/takecharge-data:/data
     restart: unless-stopped
-
-volumes:
-  takecharge-data:

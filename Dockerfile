@@ -17,7 +17,6 @@ COPY --from=go-builder /build/fasting-tracker .
 COPY frontend/ frontend/
 
 RUN mkdir -p /data
-VOLUME /data
 
 EXPOSE 8080
 CMD ["./fasting-tracker"]
