@@ -20,6 +20,10 @@ class HabitsApi {
     await _client.delete('/api/habits/$id');
   }
 
+  Future<void> reorder(List<int> ids) async {
+    await _client.put('/api/habits/reorder', data: {'ids': ids});
+  }
+
   // ── Timer habit ───────────────────────────────────────────────────────────
   Future<Map<String, dynamic>?> getActive(int habitId) async {
     try {

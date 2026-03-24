@@ -3,15 +3,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../api/habits.dart';
 import '../main.dart';
 import '../providers/habits_provider.dart';
 import '../widgets/habit_card.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  List<dynamic> _habits = [];
+
+  Future<void> _persistOrder() async {
+    final ids = _habits.map<int>((h) => h['id'] as int).toList();
+    try {
+      await habitsApi.reorder(ids);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final habitsAsync = ref.watch(habitsProvider);
 
     return habitsAsync.when(
@@ -21,20 +36,45 @@ class DashboardScreen extends ConsumerWidget {
             style: TextStyle(color: AppTheme.onSurfaceMuted)),
       ),
       data: (habits) {
-        final Widget content = habits.isEmpty
+        // Sync local list when the set of habits changes (add/delete/refresh)
+        if (_habits.length != habits.length) {
+          _habits = List.from(habits);
+        }
+
+        final Widget content = _habits.isEmpty
             ? _EmptyDashboard()
             : RefreshIndicator(
-                onRefresh: () async => ref.invalidate(habitsProvider),
-                child: ListView.separated(
+                onRefresh: () async {
+                  setState(() => _habits = []);
+                  ref.invalidate(habitsProvider);
+                },
+                child: ReorderableListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-                  itemCount: habits.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  buildDefaultDragHandles: false,
+                  itemCount: _habits.length,
                   itemBuilder: (context, i) {
-                    final habit = habits[i] as Map<String, dynamic>;
-                    return HabitCard(
-                      habit: habit,
-                      onTap: () => context.go('/habit/${habit['id']}'),
+                    final habit = _habits[i] as Map<String, dynamic>;
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey(habit['id']),
+                      index: i,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          bottom: i < _habits.length - 1 ? 12 : 0,
+                        ),
+                        child: HabitCard(
+                          habit: habit,
+                          onTap: () => context.go('/habit/${habit['id']}'),
+                        ),
+                      ),
                     );
+                  },
+                  onReorder: (oldIndex, newIndex) {
+                    if (newIndex > oldIndex) newIndex--;
+                    setState(() {
+                      final item = _habits.removeAt(oldIndex);
+                      _habits.insert(newIndex, item);
+                    });
+                    _persistOrder();
                   },
                 ),
               );

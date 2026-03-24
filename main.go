@@ -491,6 +491,35 @@ func handleHabitStyles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, styles)
 }
 
+// PUT /api/habits/reorder
+func handleHabitReorder(w http.ResponseWriter, r *http.Request, userID int64) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", 400)
+		return
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	for i, id := range body.IDs {
+		tx.Exec("UPDATE habits SET position=? WHERE id=? AND user_id=?", i, id, userID)
+	}
+	if err := tx.Commit(); err != nil {
+		tx.Rollback()
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.WriteHeader(204)
+}
+
 // DELETE /api/habits/:id (via handleHabitRouter)
 func handleHabitDelete(w http.ResponseWriter, r *http.Request, habitID int64, userID int64) {
 	if r.Method != http.MethodDelete {
@@ -526,6 +555,11 @@ func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 
 	if parts[0] == "styles" {
 		handleHabitStyles(w, r)
+		return
+	}
+
+	if parts[0] == "reorder" {
+		handleHabitReorder(w, r, userID)
 		return
 	}
 
