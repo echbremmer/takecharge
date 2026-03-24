@@ -166,14 +166,15 @@ class _DailyWeekRingsState extends State<_DailyWeekRings> {
         return Column(
           children: [
             SizedBox(
-              width: 30,
-              height: 30,
+              width: 42,
+              height: 42,
               child: CustomPaint(
                 painter: RingsPainter(
                   progresses: progresses,
                   isLimits: isLimits,
                   isFuture: isFuture,
                   isToday: isToday,
+                  ringWidthScale: 0.5,
                 ),
               ),
             ),

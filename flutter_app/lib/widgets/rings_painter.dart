@@ -10,6 +10,7 @@ class RingsPainter extends CustomPainter {
   final List<bool> isLimits;
   final bool isFuture;
   final bool isToday;
+  final double ringWidthScale;
 
   static const Color _done      = AppTheme.primary;
   static const Color _partial   = Color(0xFFE8982E);
@@ -22,6 +23,7 @@ class RingsPainter extends CustomPainter {
     required this.isLimits,
     required this.isFuture,
     required this.isToday,
+    this.ringWidthScale = 1.0,
   });
 
   @override
@@ -30,7 +32,7 @@ class RingsPainter extends CustomPainter {
     final count  = progresses.isEmpty ? 1 : progresses.length;
     final maxR   = size.width / 2;
     final totalGap = count > 1 ? (count - 1) * 2.0 : 0.0;
-    final ringWidth = (maxR - totalGap) / count;
+    final ringWidth = (maxR - totalGap) / count * ringWidthScale;
 
     for (int i = 0; i < count; i++) {
       final r = maxR - i * (ringWidth + 2) - ringWidth / 2;
@@ -84,6 +86,7 @@ class RingsPainter extends CustomPainter {
   bool shouldRepaint(RingsPainter old) =>
       old.progresses != progresses ||
       old.isLimits   != isLimits   ||
-      old.isFuture   != isFuture   ||
-      old.isToday    != isToday;
+      old.isFuture        != isFuture        ||
+      old.isToday         != isToday         ||
+      old.ringWidthScale  != ringWidthScale;
 }
