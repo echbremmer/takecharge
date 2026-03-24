@@ -114,9 +114,14 @@ class _ShellScreenState extends ConsumerState<ShellScreen>
         ],
       ),
       bottomNavigationBar: _BottomNav(
-        onTap: () {
+        location: widget.location,
+        onDashboard: () {
           _closeMenu();
           context.go('/');
+        },
+        onInsights: () {
+          _closeMenu();
+          context.go('/summary');
         },
       ),
     );
@@ -222,11 +227,19 @@ class _MenuItem extends StatelessWidget {
 // ── Bottom navigation bar ─────────────────────────────────────────────────
 
 class _BottomNav extends StatelessWidget {
-  final VoidCallback onTap;
-  const _BottomNav({required this.onTap});
+  final String location;
+  final VoidCallback onDashboard;
+  final VoidCallback onInsights;
+
+  const _BottomNav({
+    required this.location,
+    required this.onDashboard,
+    required this.onInsights,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final onSummary = location == '/summary';
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xCCF8FAF3),
@@ -239,15 +252,15 @@ class _BottomNav extends StatelessWidget {
               icon: Icons.dashboard_outlined,
               selectedIcon: Icons.dashboard,
               label: 'Dashboard',
-              selected: true,
-              onTap: onTap,
+              selected: !onSummary,
+              onTap: onDashboard,
             ),
             _NavItem(
               icon: Icons.bar_chart_outlined,
               selectedIcon: Icons.bar_chart,
               label: 'Insights',
-              selected: false,
-              onTap: () {},
+              selected: onSummary,
+              onTap: onInsights,
             ),
           ],
         ),

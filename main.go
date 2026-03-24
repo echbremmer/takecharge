@@ -1335,6 +1335,393 @@ func nowMs() int64 {
 	return time.Now().UnixMilli()
 }
 
+func weekMonday(t time.Time) time.Time {
+	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	offset := (int(d.Weekday()) + 6) % 7
+	return d.AddDate(0, 0, -offset)
+}
+
+func ifPhase(elapsedMs int64) string {
+	switch {
+	case elapsedMs >= 24*3600*1000:
+		return "Autophagy"
+	case elapsedMs >= 18*3600*1000:
+		return "Ketosis"
+	case elapsedMs >= 12*3600*1000:
+		return "Fat burning"
+	default:
+		return "Digesting"
+	}
+}
+
+// GET /api/summary
+func handleSummary(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	rows, err := db.Query(`
+		SELECT h.id, h.name, hs.slug, h.variant_slug
+		FROM habits h
+		JOIN habit_styles hs ON hs.id = h.style_id
+		WHERE h.user_id = ?
+		ORDER BY h.position, h.id`, userID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rows.Close()
+
+	type habitInfo struct {
+		ID          int64
+		Name        string
+		StyleSlug   string
+		VariantSlug string
+	}
+	var habits []habitInfo
+	for rows.Next() {
+		var h habitInfo
+		rows.Scan(&h.ID, &h.Name, &h.StyleSlug, &h.VariantSlug)
+		habits = append(habits, h)
+	}
+
+	now := time.Now()
+	todayMs := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
+	curMon := weekMonday(now)
+	curWeekMs := curMon.UnixMilli()
+	weekEndMs := curWeekMs + 7*24*3600*1000
+	nowMillis := now.UnixMilli()
+
+	// Last 6 week starts, oldest first
+	weekStarts := make([]int64, 6)
+	for i := 0; i < 6; i++ {
+		weekStarts[5-i] = curMon.AddDate(0, 0, -i*7).UnixMilli()
+	}
+
+	type TodayStatus struct {
+		IsActive     bool   `json:"is_active,omitempty"`
+		ElapsedMs    int64  `json:"elapsed_ms,omitempty"`
+		Phase        string `json:"phase,omitempty"`
+		TargetsTotal int    `json:"targets_total,omitempty"`
+		TargetsHit   int    `json:"targets_hit,omitempty"`
+		WeekTotal    int    `json:"week_total,omitempty"`
+		WeekChecked  int    `json:"week_checked,omitempty"`
+	}
+	type BarPoint struct {
+		Ms    int64   `json:"ms"`
+		Value float64 `json:"value"`
+	}
+	type HabitSummaryItem struct {
+		ID          int64        `json:"id"`
+		Name        string       `json:"name"`
+		StyleSlug   string       `json:"style_slug"`
+		VariantSlug string       `json:"variant_slug"`
+		Today       TodayStatus  `json:"today"`
+		WeekBars    []BarPoint   `json:"week_bars"`
+		TrendBars   []BarPoint   `json:"trend_bars"`
+	}
+
+	var result []HabitSummaryItem
+
+	for _, h := range habits {
+		item := HabitSummaryItem{
+			ID:          h.ID,
+			Name:        h.Name,
+			StyleSlug:   h.StyleSlug,
+			VariantSlug: h.VariantSlug,
+			WeekBars:    []BarPoint{},
+			TrendBars:   []BarPoint{},
+		}
+
+		switch h.StyleSlug {
+		case "timer":
+			var startMs sql.NullInt64
+			db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_id=?", h.ID).Scan(&startMs)
+			if startMs.Valid {
+				elapsed := nowMillis - startMs.Int64
+				item.Today = TodayStatus{IsActive: true, ElapsedMs: elapsed, Phase: ifPhase(elapsed)}
+			}
+
+			// Week bars: sum duration per day Mon-Sun
+			dayMap := map[int64]float64{}
+			sRows, _ := db.Query(`SELECT (start_ms/86400000)*86400000, SUM(duration_ms)
+				FROM sessions WHERE habit_id=? AND start_ms>=? AND start_ms<?
+				GROUP BY 1`, h.ID, curWeekMs, weekEndMs)
+			if sRows != nil {
+				for sRows.Next() {
+					var d int64
+					var ms int64
+					sRows.Scan(&d, &ms)
+					dayMap[d] = float64(ms) / 3600000.0
+				}
+				sRows.Close()
+			}
+			for i := 0; i < 7; i++ {
+				d := curWeekMs + int64(i)*86400000
+				item.WeekBars = append(item.WeekBars, BarPoint{Ms: d, Value: dayMap[d]})
+			}
+
+			// Trend: total hours per week
+			for _, ws := range weekStarts {
+				var ms int64
+				db.QueryRow(`SELECT COALESCE(SUM(duration_ms),0) FROM sessions WHERE habit_id=? AND start_ms>=? AND start_ms<?`,
+					h.ID, ws, ws+7*24*3600*1000).Scan(&ms)
+				item.TrendBars = append(item.TrendBars, BarPoint{Ms: ws, Value: float64(ms) / 3600000.0})
+			}
+
+		case "daily":
+			type tgt struct {
+				id  int64
+				val float64
+				mod string
+			}
+			var targets []tgt
+			tRows, _ := db.Query("SELECT id, target_value, mode FROM daily_targets WHERE habit_id=?", h.ID)
+			if tRows != nil {
+				for tRows.Next() {
+					var t tgt
+					tRows.Scan(&t.id, &t.val, &t.mod)
+					targets = append(targets, t)
+				}
+				tRows.Close()
+			}
+
+			// Today status
+			hit := 0
+			for _, t := range targets {
+				var v float64
+				db.QueryRow("SELECT COALESCE(value,0) FROM daily_logs WHERE target_id=? AND day_ms=?", t.id, todayMs).Scan(&v)
+				if (t.mod == "limit" && v <= t.val) || (t.mod != "limit" && v >= t.val) {
+					hit++
+				}
+			}
+			item.Today = TodayStatus{TargetsTotal: len(targets), TargetsHit: hit}
+
+			// Week bars: avg completion per day
+			type dayAcc struct{ sum float64; n int }
+			dayMap := map[int64]*dayAcc{}
+			for _, t := range targets {
+				lRows, _ := db.Query("SELECT day_ms, value FROM daily_logs WHERE target_id=? AND day_ms>=? AND day_ms<?",
+					t.id, curWeekMs, weekEndMs)
+				if lRows != nil {
+					for lRows.Next() {
+						var d int64
+						var v float64
+						lRows.Scan(&d, &v)
+						c := v / t.val
+						if c > 1 {
+							c = 1
+						}
+						if dayMap[d] == nil {
+							dayMap[d] = &dayAcc{}
+						}
+						dayMap[d].sum += c
+						dayMap[d].n++
+					}
+					lRows.Close()
+				}
+			}
+			for i := 0; i < 7; i++ {
+				d := curWeekMs + int64(i)*86400000
+				var v float64
+				if a := dayMap[d]; a != nil && a.n > 0 {
+					v = a.sum / float64(a.n)
+				}
+				item.WeekBars = append(item.WeekBars, BarPoint{Ms: d, Value: v})
+			}
+
+			// Trend: avg completion per week
+			for _, ws := range weekStarts {
+				var sum float64
+				var cnt int
+				for _, t := range targets {
+					lRows, _ := db.Query("SELECT value FROM daily_logs WHERE target_id=? AND day_ms>=? AND day_ms<?",
+						t.id, ws, ws+7*24*3600*1000)
+					if lRows != nil {
+						for lRows.Next() {
+							var v float64
+							lRows.Scan(&v)
+							c := v / t.val
+							if c > 1 {
+								c = 1
+							}
+							sum += c
+							cnt++
+						}
+						lRows.Close()
+					}
+				}
+				var v float64
+				if cnt > 0 {
+					v = sum / float64(cnt)
+				}
+				item.TrendBars = append(item.TrendBars, BarPoint{Ms: ws, Value: v})
+			}
+
+		case "todo":
+			var total, checked int
+			db.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN checked THEN 1 ELSE 0 END),0) FROM todo_items WHERE habit_id=? AND week_start_ms=?",
+				h.ID, curWeekMs).Scan(&total, &checked)
+			item.Today = TodayStatus{WeekTotal: total, WeekChecked: checked}
+
+			for _, ws := range weekStarts {
+				var tot, chk int
+				db.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN checked THEN 1 ELSE 0 END),0) FROM todo_items WHERE habit_id=? AND week_start_ms=?",
+					h.ID, ws).Scan(&tot, &chk)
+				var v float64
+				if tot > 0 {
+					v = float64(chk) / float64(tot)
+				}
+				item.TrendBars = append(item.TrendBars, BarPoint{Ms: ws, Value: v})
+			}
+		}
+
+		result = append(result, item)
+	}
+
+	writeJSON(w, 200, map[string]interface{}{"habits": result})
+}
+
+// POST /api/dev/seed — inserts 6 weeks of test data for all habits
+func handleDevSeed(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	rows, _ := db.Query(`SELECT h.id, hs.slug FROM habits h JOIN habit_styles hs ON hs.id=h.style_id WHERE h.user_id=?`, userID)
+	type hInfo struct {
+		id   int64
+		slug string
+	}
+	var habits []hInfo
+	for rows.Next() {
+		var h hInfo
+		rows.Scan(&h.id, &h.slug)
+		habits = append(habits, h)
+	}
+	rows.Close()
+
+	now := time.Now()
+	curMon := weekMonday(now)
+
+	for _, h := range habits {
+		switch h.slug {
+		case "timer":
+			// 6 weeks, 4-5 fasts/week, 14-19h each, starting at 20:00
+			fastDaysPerWeek := [][]int{
+				{0, 1, 3, 4, 6},
+				{0, 2, 3, 5, 6},
+				{1, 2, 4, 5},
+				{0, 1, 3, 4, 6},
+				{0, 2, 4, 5},
+				{1, 3, 4, 5, 6},
+			}
+			durations := []int{16, 17, 14, 18, 15, 19, 16, 17, 14, 18}
+			for week := 0; week < 6; week++ {
+				mon := curMon.AddDate(0, 0, -week*7)
+				for _, day := range fastDaysPerWeek[week] {
+					d := mon.AddDate(0, 0, day)
+					if d.After(now) {
+						continue
+					}
+					startMs := time.Date(d.Year(), d.Month(), d.Day(), 20, 0, 0, 0, time.UTC).UnixMilli()
+					durH := durations[(week*7+day)%len(durations)]
+					endMs := startMs + int64(durH)*3600000
+					if endMs > now.UnixMilli() {
+						continue
+					}
+					db.Exec("INSERT OR IGNORE INTO sessions (habit_id, start_ms, end_ms, duration_ms) VALUES (?,?,?,?)",
+						h.id, startMs, endMs, int64(durH)*3600000)
+				}
+			}
+
+		case "daily":
+			// Ensure 3 targets exist
+			var tc int
+			db.QueryRow("SELECT COUNT(*) FROM daily_targets WHERE habit_id=?", h.id).Scan(&tc)
+			if tc == 0 {
+				db.Exec("INSERT INTO daily_targets (habit_id,name,unit,target_value,step,position,mode) VALUES (?,?,?,?,?,?,?)",
+					h.id, "Steps", "steps", 10000, 500, 0, "target")
+				db.Exec("INSERT INTO daily_targets (habit_id,name,unit,target_value,step,position,mode) VALUES (?,?,?,?,?,?,?)",
+					h.id, "Water", "glasses", 8, 1, 1, "target")
+				db.Exec("INSERT INTO daily_targets (habit_id,name,unit,target_value,step,position,mode) VALUES (?,?,?,?,?,?,?)",
+					h.id, "Exercise", "min", 30, 5, 2, "target")
+			}
+			type tInfo struct {
+				id  int64
+				val float64
+			}
+			var targets []tInfo
+			tRows, _ := db.Query("SELECT id, target_value FROM daily_targets WHERE habit_id=?", h.id)
+			for tRows.Next() {
+				var t tInfo
+				tRows.Scan(&t.id, &t.val)
+				targets = append(targets, t)
+			}
+			tRows.Close()
+
+			multipliers := []float64{1.0, 0.8, 0.9, 0.7, 1.0, 0.85, 0.95}
+			for week := 0; week < 6; week++ {
+				mon := curMon.AddDate(0, 0, -week*7)
+				for day := 0; day < 7; day++ {
+					d := mon.AddDate(0, 0, day)
+					if d.After(now) {
+						continue
+					}
+					if (day+week)%5 == 4 {
+						continue // skip ~1 day/week
+					}
+					dayMs := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
+					for ti, t := range targets {
+						mul := multipliers[(day+week+ti)%len(multipliers)]
+						db.Exec("INSERT OR IGNORE INTO daily_logs (target_id,day_ms,value) VALUES (?,?,?)",
+							t.id, dayMs, t.val*mul)
+					}
+				}
+			}
+
+		case "todo":
+			texts := []string{
+				"Review weekly goals", "Clean workspace", "Call family",
+				"Read 30 pages", "Meal prep Sunday", "Exercise 3x this week",
+				"Journal entry",
+			}
+			checkedPatterns := []int{5, 6, 4, 7, 5, 3} // checked per week (out of 7)
+			for week := 0; week < 6; week++ {
+				mon := curMon.AddDate(0, 0, -week*7)
+				ws := mon.UnixMilli()
+				var cnt int
+				db.QueryRow("SELECT COUNT(*) FROM todo_items WHERE habit_id=? AND week_start_ms=?", h.id, ws).Scan(&cnt)
+				if cnt > 0 {
+					continue
+				}
+				nChecked := checkedPatterns[week]
+				if week == 0 {
+					nChecked = 2 // current week in progress
+				}
+				for i, text := range texts {
+					db.Exec("INSERT INTO todo_items (habit_id,text,checked,week_start_ms,created_ms) VALUES (?,?,?,?,?)",
+						h.id, text, i < nChecked, ws, ws+int64(i)*3600000)
+				}
+			}
+		}
+	}
+
+	w.WriteHeader(204)
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -1359,6 +1746,8 @@ func main() {
 	http.HandleFunc("/api/profile/image", handleProfileImage)
 	http.HandleFunc("/api/habits", handleHabits)
 	http.HandleFunc("/api/habits/", handleHabitRouter)
+	http.HandleFunc("/api/summary", handleSummary)
+	http.HandleFunc("/api/dev/seed", handleDevSeed)
 
 	http.Handle("/", http.FileServer(http.Dir("frontend")))
 

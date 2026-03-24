@@ -11,6 +11,7 @@ import 'screens/habit_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/add_habit_screen.dart';
 import 'screens/server_url_screen.dart';
+import 'screens/summary_screen.dart';
 import 'screens/shell_screen.dart';
 
 class _RouterListenable extends ChangeNotifier {
@@ -107,6 +108,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               final id = int.parse(state.pathParameters['id']!);
               return HabitScreen(habitId: id);
             },
+          ),
+          GoRoute(
+            path: '/summary',
+            builder: (_, __) => const SummaryScreen(),
           ),
         ],
       ),
