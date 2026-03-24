@@ -21,38 +21,47 @@ class DashboardScreen extends ConsumerWidget {
             style: TextStyle(color: AppTheme.onSurfaceMuted)),
       ),
       data: (habits) {
-        if (habits.isEmpty) {
-          return _EmptyDashboard(onAdd: () => context.go('/add-habit'));
-        }
-        return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(habitsProvider),
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-            itemCount: habits.length + 1, // +1 for add button at bottom
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, i) {
-              if (i == habits.length) {
-                return _AddHabitButton(
-                    onTap: () => context.go('/add-habit'));
-              }
-              final habit = habits[i] as Map<String, dynamic>;
-              return HabitCard(
-                habit: habit,
-                onTap: () => context.go('/habit/${habit['id']}'),
+        final Widget content = habits.isEmpty
+            ? _EmptyDashboard()
+            : RefreshIndicator(
+                onRefresh: () async => ref.invalidate(habitsProvider),
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                  itemCount: habits.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, i) {
+                    final habit = habits[i] as Map<String, dynamic>;
+                    return HabitCard(
+                      habit: habit,
+                      onTap: () => context.go('/habit/${habit['id']}'),
+                    );
+                  },
+                ),
               );
-            },
-          ),
+
+        return Stack(
+          children: [
+            content,
+            Positioned(
+              bottom: 24,
+              right: 20,
+              child: FloatingActionButton(
+                onPressed: () => context.go('/add-habit'),
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                elevation: 4,
+                shape: const CircleBorder(),
+                child: const Icon(Icons.add),
+              ),
+            ),
+          ],
         );
       },
     );
   }
-
 }
 
 class _EmptyDashboard extends StatelessWidget {
-  final VoidCallback onAdd;
-  const _EmptyDashboard({required this.onAdd});
-
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -71,35 +80,12 @@ class _EmptyDashboard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Add your first habit below',
+            'Tap + to add your first habit',
             style: GoogleFonts.plusJakartaSans(
                 fontSize: 14, color: AppTheme.onSurfaceMuted),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add),
-            label: const Text('Add habit'),
           ),
         ],
       ),
     );
   }
 }
-
-class _AddHabitButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _AddHabitButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: onTap,
-      icon: const Icon(Icons.add, size: 18, color: AppTheme.primary),
-      label: Text('Add habit',
-          style: GoogleFonts.plusJakartaSans(
-              color: AppTheme.primary, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
