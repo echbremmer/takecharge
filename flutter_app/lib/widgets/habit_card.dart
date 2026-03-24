@@ -18,6 +18,7 @@ class HabitCard extends StatelessWidget {
     final type = slug.toUpperCase();
     final isDaily = slug == 'daily';
     final isTimer = slug == 'timer';
+    final isTodo  = slug == 'todo';
 
     return Card(
       child: InkWell(
@@ -68,6 +69,10 @@ class HabitCard extends StatelessWidget {
               if (isTimer) ...[
                 const SizedBox(height: 10),
                 _TimerCardStatus(habitId: (habit['id'] as num).toInt()),
+              ],
+              if (isTodo) ...[
+                const SizedBox(height: 10),
+                _TodoCardStatus(habitId: (habit['id'] as num).toInt()),
               ],
             ],
           ),
@@ -429,6 +434,186 @@ class _FlipClock extends StatelessWidget {
         _colon(),
         _segment(s),
       ],
+    );
+  }
+}
+
+// ── Todo card status ───────────────────────────────────────────────────────
+
+class _TodoCardStatus extends StatefulWidget {
+  final int habitId;
+  const _TodoCardStatus({required this.habitId});
+
+  @override
+  State<_TodoCardStatus> createState() => _TodoCardStatusState();
+}
+
+class _TodoCardStatusState extends State<_TodoCardStatus> {
+  List<Map<String, dynamic>> _todos = [];
+  final Map<int, Timer> _removalTimers = {};
+  final Set<int> _pendingRemoval = {};
+  bool _loaded = false;
+
+  int get _currentWeekMs {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return today.subtract(Duration(days: today.weekday - 1)).millisecondsSinceEpoch;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    for (final t in _removalTimers.values) t.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final todos = await habitsApi.getTodos(widget.habitId, weekMs: _currentWeekMs);
+      if (mounted) {
+        setState(() {
+          _todos = todos
+              .cast<Map<String, dynamic>>()
+              .where((t) => !(t['checked'] as bool? ?? false))
+              .take(4)
+              .toList();
+          _loaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  void _check(Map<String, dynamic> todo) {
+    final id = (todo['id'] as num).toInt();
+    setState(() {
+      todo['checked'] = true;
+      _pendingRemoval.add(id);
+    });
+    habitsApi.toggleTodo(widget.habitId, id, true);
+    _removalTimers[id]?.cancel();
+    _removalTimers[id] = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _todos.removeWhere((t) => (t['id'] as num).toInt() == id);
+          _pendingRemoval.remove(id);
+          _removalTimers.remove(id);
+        });
+      }
+    });
+  }
+
+  void _undo(Map<String, dynamic> todo) {
+    final id = (todo['id'] as num).toInt();
+    _removalTimers[id]?.cancel();
+    _removalTimers.remove(id);
+    setState(() {
+      todo['checked'] = false;
+      _pendingRemoval.remove(id);
+    });
+    habitsApi.toggleTodo(widget.habitId, id, false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox(height: 20);
+    if (_todos.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: _todos.map((t) {
+        final id = (t['id'] as num).toInt();
+        final isPending = _pendingRemoval.contains(id);
+        return _TodoCardItem(
+          todo: t,
+          isPending: isPending,
+          onCheck: isPending ? null : () => _check(t),
+          onUndo: isPending ? () => _undo(t) : null,
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ── Todo card item ─────────────────────────────────────────────────────────
+
+class _TodoCardItem extends StatelessWidget {
+  final Map<String, dynamic> todo;
+  final bool isPending;
+  final VoidCallback? onCheck;
+  final VoidCallback? onUndo;
+
+  const _TodoCardItem({
+    required this.todo,
+    required this.isPending,
+    this.onCheck,
+    this.onUndo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final text = todo['text'] as String? ?? '';
+
+    return GestureDetector(
+      onTap: onCheck,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Row(
+          children: [
+            // Checkbox
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: isPending ? AppTheme.primary : Colors.transparent,
+                border: Border.all(
+                  color: isPending ? AppTheme.primary : AppTheme.onSurfaceMuted,
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: isPending
+                  ? const Icon(Icons.check, size: 13, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            // Text
+            Expanded(
+              child: Text(
+                text,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  color: isPending ? AppTheme.onSurfaceMuted : AppTheme.onSurface,
+                  decoration: isPending ? TextDecoration.lineThrough : null,
+                  decorationColor: AppTheme.onSurfaceMuted,
+                ),
+              ),
+            ),
+            // Undo button
+            if (isPending)
+              GestureDetector(
+                onTap: onUndo,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(
+                    'Undo',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
