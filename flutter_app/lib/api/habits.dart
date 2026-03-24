@@ -10,7 +10,9 @@ class HabitsApi {
   }
 
   Future<Map<String, dynamic>> create(String name, String type) async {
-    final res = await _client.post('/api/habits', data: {'name': name, 'type': type});
+    const slugToId = {'timer': 1, 'daily': 2, 'todo': 3};
+    final res = await _client.post('/api/habits',
+        data: {'name': name, 'style_id': slugToId[type] ?? 1});
     return res.data as Map<String, dynamic>;
   }
 
