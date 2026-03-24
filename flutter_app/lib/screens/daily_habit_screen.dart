@@ -1,8 +1,8 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../api/habits.dart';
 import '../main.dart';
+import '../widgets/rings_painter.dart';
 
 class DailyHabitScreen extends StatefulWidget {
   final int habitId;
@@ -830,12 +830,16 @@ class _WeekGrid extends StatelessWidget {
         final isFuture = day.isAfter(todayStart);
         final isToday = day.isAtSameMomentAs(todayStart);
 
-        // Build progress list per target
+        // Build progress and mode lists per target
         final progresses = targets.map((t) {
           final tid = (t['id'] as num).toInt();
           final v = getValue(dayMs, tid);
           return isFuture ? 0.0 : progress(t, v);
         }).toList();
+
+        final isLimits = targets
+            .map((t) => (t['mode'] as String? ?? 'target') == 'limit')
+            .toList();
 
         final size = compact ? 28.0 : 36.0;
 
@@ -845,8 +849,9 @@ class _WeekGrid extends StatelessWidget {
               width: size,
               height: size,
               child: CustomPaint(
-                painter: _RingsPainter(
+                painter: RingsPainter(
                   progresses: progresses,
+                  isLimits: isLimits,
                   isFuture: isFuture,
                   isToday: isToday,
                 ),
@@ -872,80 +877,3 @@ class _WeekGrid extends StatelessWidget {
   }
 }
 
-// ── Concentric rings painter ──────────────────────────────────────────────
-
-class _RingsPainter extends CustomPainter {
-  final List<double> progresses; // 0..1 per target
-  final bool isFuture;
-  final bool isToday;
-
-  static const Color _done = AppTheme.primary;
-  static const Color _partial = Color(0xFFE8982E);
-  static const Color _empty = Color(0x1A55624D);
-  static const Color _future = Color(0x0A55624D);
-
-  const _RingsPainter({
-    required this.progresses,
-    required this.isFuture,
-    required this.isToday,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final count = progresses.isEmpty ? 1 : progresses.length;
-    final maxR = size.width / 2;
-    // Rings: outermost = first target, innermost = last
-    // ringWidth grows based on count
-    final totalGap = count > 1 ? (count - 1) * 2.0 : 0.0;
-    final ringWidth = (maxR - totalGap) / count;
-
-    for (int i = 0; i < count; i++) {
-      final r = maxR - i * (ringWidth + 2) - ringWidth / 2;
-      if (r <= 0) continue;
-
-      final prog = progresses.isEmpty ? 0.0 : progresses[i];
-
-      // Background track
-      final trackPaint = Paint()
-        ..color = isFuture ? _future : _empty
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = ringWidth
-        ..strokeCap = StrokeCap.round;
-
-      canvas.drawCircle(center, r, trackPaint);
-
-      // Progress arc
-      if (!isFuture && prog > 0) {
-        final arcColor =
-            prog >= 1.0 ? _done : _partial;
-        final arcPaint = Paint()
-          ..color = arcColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = ringWidth
-          ..strokeCap = StrokeCap.round;
-
-        canvas.drawArc(
-          Rect.fromCircle(center: center, radius: r),
-          -math.pi / 2,
-          2 * math.pi * prog,
-          false,
-          arcPaint,
-        );
-      }
-    }
-
-    // Today indicator dot
-    if (isToday) {
-      final dotPaint = Paint()..color = AppTheme.primary;
-      canvas.drawCircle(
-          Offset(center.dx, size.height - 1), 2.5, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RingsPainter old) =>
-      old.progresses != progresses ||
-      old.isFuture != isFuture ||
-      old.isToday != isToday;
-}
