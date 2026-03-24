@@ -6,6 +6,7 @@ import '../main.dart';
 import '../providers/habits_provider.dart';
 import 'daily_habit_screen.dart';
 import 'timer_habit_screen.dart';
+import 'todo_habit_screen.dart';
 
 class HabitScreen extends ConsumerWidget {
   final int habitId;
@@ -43,6 +44,8 @@ class HabitScreen extends ConsumerWidget {
             return TimerHabitScreen(habitId: habitId, habitName: name);
           case 'daily':
             return DailyHabitScreen(habitId: habitId, habitName: name);
+          case 'todo':
+            return TodoHabitScreen(habitId: habitId, habitName: name);
 
           default:
             // Daily and Todo screens — coming soon

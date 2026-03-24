@@ -99,12 +99,12 @@ class HabitsApi {
 
   Future<Map<String, dynamic>> createTodo(int habitId, String text, int weekMs) async {
     final res = await _client.post('/api/habits/$habitId/todos',
-        data: {'text': text, 'week_ms': weekMs});
+        data: {'text': text, 'week_start_ms': weekMs});
     return res.data as Map<String, dynamic>;
   }
 
   Future<void> toggleTodo(int habitId, int todoId, bool done) async {
-    await _client.put('/api/habits/$habitId/todos/$todoId', data: {'done': done});
+    await _client.put('/api/habits/$habitId/todos/$todoId', data: {'checked': done});
   }
 
   Future<void> deleteTodo(int habitId, int todoId) async {
