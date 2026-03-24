@@ -532,8 +532,7 @@ class _TodoCardStatusState extends State<_TodoCardStatus> {
         return _TodoCardItem(
           todo: t,
           isPending: isPending,
-          onCheck: isPending ? null : () => _check(t),
-          onUndo: isPending ? () => _undo(t) : null,
+          onTap: isPending ? () => _undo(t) : () => _check(t),
         );
       }).toList(),
     );
@@ -545,14 +544,12 @@ class _TodoCardStatusState extends State<_TodoCardStatus> {
 class _TodoCardItem extends StatelessWidget {
   final Map<String, dynamic> todo;
   final bool isPending;
-  final VoidCallback? onCheck;
-  final VoidCallback? onUndo;
+  final VoidCallback onTap;
 
   const _TodoCardItem({
     required this.todo,
     required this.isPending,
-    this.onCheck,
-    this.onUndo,
+    required this.onTap,
   });
 
   @override
@@ -560,7 +557,7 @@ class _TodoCardItem extends StatelessWidget {
     final text = todo['text'] as String? ?? '';
 
     return GestureDetector(
-      onTap: onCheck,
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 7),
         child: Row(
@@ -595,22 +592,6 @@ class _TodoCardItem extends StatelessWidget {
                 ),
               ),
             ),
-            // Undo button
-            if (isPending)
-              GestureDetector(
-                onTap: onUndo,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Text(
-                    'Undo',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
