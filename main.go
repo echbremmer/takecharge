@@ -31,12 +31,13 @@ type HabitStyle struct {
 }
 
 type Habit struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	StyleID   int64  `json:"style_id"`
-	StyleSlug string `json:"style_slug"`
-	Position  int    `json:"position"`
-	CreatedMs int64  `json:"created_ms"`
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	StyleID     int64  `json:"style_id"`
+	StyleSlug   string `json:"style_slug"`
+	VariantSlug string `json:"variant_slug"`
+	Position    int    `json:"position"`
+	CreatedMs   int64  `json:"created_ms"`
 }
 
 type Session struct {
@@ -195,6 +196,8 @@ func initDB() {
 	db.Exec("ALTER TABLE users ADD COLUMN profile_image BLOB")
 	db.Exec("ALTER TABLE users ADD COLUMN profile_image_type TEXT")
 	db.Exec("ALTER TABLE daily_targets ADD COLUMN mode TEXT NOT NULL DEFAULT 'target'")
+	db.Exec("ALTER TABLE habits ADD COLUMN variant_slug TEXT NOT NULL DEFAULT ''")
+	db.Exec("UPDATE habits SET variant_slug = 'intermittent_fasting' WHERE name = 'Fasting' AND style_id = 1 AND variant_slug = ''")
 }
 
 // --- Auth helpers ---
@@ -227,9 +230,9 @@ func getUserID(r *http.Request) (int64, bool) {
 
 func createDefaultHabits(userID int64) {
 	now := nowMs()
-	db.Exec("INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, 'Fasting', 1, 0, ?)", userID, now)
-	db.Exec("INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, 'Be Active', 2, 1, ?)", userID, now)
-	db.Exec("INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, 'Things to Do', 3, 2, ?)", userID, now)
+	db.Exec("INSERT INTO habits (user_id, name, style_id, variant_slug, position, created_ms) VALUES (?, 'Fasting', 1, 'intermittent_fasting', 0, ?)", userID, now)
+	db.Exec("INSERT INTO habits (user_id, name, style_id, variant_slug, position, created_ms) VALUES (?, 'Be Active', 2, '', 1, ?)", userID, now)
+	db.Exec("INSERT INTO habits (user_id, name, style_id, variant_slug, position, created_ms) VALUES (?, 'Things to Do', 3, '', 2, ?)", userID, now)
 }
 
 // --- Auth handlers ---
@@ -410,7 +413,7 @@ func handleHabits(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := db.Query(`
-			SELECT h.id, h.name, h.style_id, hs.slug, h.position, h.created_ms
+			SELECT h.id, h.name, h.style_id, hs.slug, h.variant_slug, h.position, h.created_ms
 			FROM habits h
 			JOIN habit_styles hs ON hs.id = h.style_id
 			WHERE h.user_id = ?
@@ -423,15 +426,16 @@ func handleHabits(w http.ResponseWriter, r *http.Request) {
 		habits := []Habit{}
 		for rows.Next() {
 			var h Habit
-			rows.Scan(&h.ID, &h.Name, &h.StyleID, &h.StyleSlug, &h.Position, &h.CreatedMs)
+			rows.Scan(&h.ID, &h.Name, &h.StyleID, &h.StyleSlug, &h.VariantSlug, &h.Position, &h.CreatedMs)
 			habits = append(habits, h)
 		}
 		writeJSON(w, 200, habits)
 
 	case http.MethodPost:
 		var body struct {
-			Name    string `json:"name"`
-			StyleID int64  `json:"style_id"`
+			Name        string `json:"name"`
+			StyleID     int64  `json:"style_id"`
+			VariantSlug string `json:"variant_slug"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid json", 400)
@@ -452,8 +456,8 @@ func handleHabits(w http.ResponseWriter, r *http.Request) {
 		db.QueryRow("SELECT COALESCE(MAX(position), -1) FROM habits WHERE user_id = ?", userID).Scan(&maxPos)
 		now := nowMs()
 		res, err := db.Exec(
-			"INSERT INTO habits (user_id, name, style_id, position, created_ms) VALUES (?, ?, ?, ?, ?)",
-			userID, body.Name, body.StyleID, maxPos+1, now,
+			"INSERT INTO habits (user_id, name, style_id, variant_slug, position, created_ms) VALUES (?, ?, ?, ?, ?, ?)",
+			userID, body.Name, body.StyleID, body.VariantSlug, maxPos+1, now,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -462,7 +466,8 @@ func handleHabits(w http.ResponseWriter, r *http.Request) {
 		id, _ := res.LastInsertId()
 		writeJSON(w, 201, Habit{
 			ID: id, Name: body.Name, StyleID: body.StyleID,
-			StyleSlug: styleSlug, Position: maxPos + 1, CreatedMs: now,
+			StyleSlug: styleSlug, VariantSlug: body.VariantSlug,
+			Position: maxPos + 1, CreatedMs: now,
 		})
 
 	default:
@@ -518,6 +523,58 @@ func handleHabitReorder(w http.ResponseWriter, r *http.Request, userID int64) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+// GET /api/habits/:id/insight
+func handleHabitInsight(w http.ResponseWriter, r *http.Request, habitID int64, userID int64) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var variantSlug string
+	err := db.QueryRow("SELECT variant_slug FROM habits WHERE id=? AND user_id=?", habitID, userID).Scan(&variantSlug)
+	if err != nil {
+		http.Error(w, "not found", 404)
+		return
+	}
+	if variantSlug != "intermittent_fasting" {
+		http.Error(w, "no insight for this habit type", 400)
+		return
+	}
+
+	var startMs sql.NullInt64
+	db.QueryRow("SELECT start_ms FROM active_sessions WHERE habit_id=?", habitID).Scan(&startMs)
+
+	now := nowMs()
+	isActive := startMs.Valid
+	var elapsedMs int64
+	if isActive {
+		elapsedMs = now - startMs.Int64
+	}
+
+	const fatBurningThresholdMs = 12 * 3600 * 1000
+	const kcalPerMs = 70.0 / 3600000.0
+
+	fatBurning := isActive && elapsedMs >= fatBurningThresholdMs
+	var fatBurningInMs int64
+	var fatBurningStartsMs int64
+	if isActive {
+		fatBurningStartsMs = startMs.Int64 + fatBurningThresholdMs
+		if !fatBurning {
+			fatBurningInMs = fatBurningThresholdMs - elapsedMs
+		}
+	}
+
+	kcalBurned := int64(float64(elapsedMs) * kcalPerMs)
+
+	writeJSON(w, 200, map[string]interface{}{
+		"is_active":             isActive,
+		"elapsed_ms":            elapsedMs,
+		"fat_burning":           fatBurning,
+		"fat_burning_starts_ms": fatBurningStartsMs,
+		"fat_burning_in_ms":     fatBurningInMs,
+		"kcal_burned":           kcalBurned,
+	})
 }
 
 // DELETE /api/habits/:id (via handleHabitRouter)
@@ -618,6 +675,8 @@ func handleHabitRouter(w http.ResponseWriter, r *http.Request) {
 		}
 	case "logs":
 		handleDailyLogs(w, r, habitID)
+	case "insight":
+		handleHabitInsight(w, r, habitID, userID)
 	default:
 		http.Error(w, "not found", 404)
 	}

@@ -15,9 +15,10 @@ class HabitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slug = habit['style_slug'] as String? ?? habit['type'] as String? ?? '';
-    final type = slug.toUpperCase();
+    final variantSlug = habit['variant_slug'] as String? ?? '';
+    final isIF    = variantSlug == 'intermittent_fasting';
     final isDaily = slug == 'daily';
-    final isTimer = slug == 'timer';
+    final isTimer = slug == 'timer' && !isIF;
     final isTodo  = slug == 'todo';
 
     return Card(
@@ -45,16 +46,18 @@ class HabitCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryFixed,
+                      color: isIF
+                          ? const Color(0xFFE8650A).withOpacity(0.12)
+                          : AppTheme.primaryFixed,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      type,
+                      isIF ? 'IF' : slug.toUpperCase(),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.5,
-                        color: AppTheme.primary,
+                        color: isIF ? const Color(0xFFE8650A) : AppTheme.primary,
                       ),
                     ),
                   ),
@@ -65,6 +68,10 @@ class HabitCard extends StatelessWidget {
               if (isDaily) ...[
                 const SizedBox(height: 12),
                 _DailyWeekRings(habitId: (habit['id'] as num).toInt()),
+              ],
+              if (isIF) ...[
+                const SizedBox(height: 10),
+                _IFCardStatus(habitId: (habit['id'] as num).toInt()),
               ],
               if (isTimer) ...[
                 const SizedBox(height: 10),
@@ -611,6 +618,163 @@ class _TodoCardItem extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── IF card status ─────────────────────────────────────────────────────────
+
+class _IFCardStatus extends StatefulWidget {
+  final int habitId;
+  const _IFCardStatus({required this.habitId});
+
+  @override
+  State<_IFCardStatus> createState() => _IFCardStatusState();
+}
+
+class _IFCardStatusState extends State<_IFCardStatus> {
+  int? _activeStartMs;
+  bool _loaded = false;
+  Timer? _ticker;
+
+  static const _fatBurningThresholdMs = 12 * 3600 * 1000;
+
+  int get _elapsedMs => _activeStartMs != null
+      ? DateTime.now().millisecondsSinceEpoch - _activeStartMs!
+      : 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final active = await habitsApi.getActive(widget.habitId);
+      if (mounted) {
+        setState(() {
+          _activeStartMs = active != null ? active['start'] as int : null;
+          _loaded = true;
+        });
+        if (_activeStartMs != null) {
+          _ticker?.cancel();
+          _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+            if (mounted) setState(() {});
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox(height: 20);
+
+    final isActive = _activeStartMs != null;
+    final elapsed = _elapsedMs;
+    final fatBurning = elapsed >= _fatBurningThresholdMs;
+    final kcal = (elapsed / 3600000 * 70).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: isActive
+                    ? AppTheme.primary
+                    : AppTheme.onSurfaceMuted.withAlpha(80),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 10),
+            if (isActive)
+              _FlipClock(elapsedMs: elapsed)
+            else
+              Text(
+                'Ready to fast',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, color: AppTheme.onSurfaceMuted),
+              ),
+            const Spacer(),
+            if (isActive)
+              Text(
+                '$kcal kcal',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: AppTheme.onSurfaceMuted),
+              ),
+          ],
+        ),
+        if (isActive) ...[
+          const SizedBox(height: 6),
+          _IFFatBurningRow(
+            fatBurning: fatBurning,
+            fatBurningInMs: fatBurning ? 0 : _fatBurningThresholdMs - elapsed,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ── IF fat burning row ─────────────────────────────────────────────────────
+
+class _IFFatBurningRow extends StatelessWidget {
+  final bool fatBurning;
+  final int fatBurningInMs;
+
+  static const _orange = Color(0xFFE8650A);
+
+  const _IFFatBurningRow(
+      {required this.fatBurning, required this.fatBurningInMs});
+
+  @override
+  Widget build(BuildContext context) {
+    if (fatBurning) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: _orange.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🔥', style: TextStyle(fontSize: 11)),
+            const SizedBox(width: 4),
+            Text(
+              'Fat burning active',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _orange,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final h = fatBurningInMs ~/ 3600000;
+    final m = (fatBurningInMs % 3600000) ~/ 60000;
+    final timeStr = h > 0 ? '${h}h ${m}m' : '${m}m';
+
+    return Text(
+      'Fat burning in $timeStr',
+      style: GoogleFonts.plusJakartaSans(
+          fontSize: 11, color: AppTheme.onSurfaceMuted),
     );
   }
 }

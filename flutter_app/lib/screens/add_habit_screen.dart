@@ -17,6 +17,7 @@ class AddHabitScreen extends ConsumerStatefulWidget {
 class _AddHabitScreenState extends ConsumerState<AddHabitScreen> {
   final _nameCtrl = TextEditingController();
   String _type = 'timer';
+  String? _variantSlug; // null = generic type selected
   bool _loading = false;
   String? _error;
 
@@ -31,7 +32,7 @@ class _AddHabitScreenState extends ConsumerState<AddHabitScreen> {
     if (name.isEmpty) return;
     setState(() { _loading = true; _error = null; });
     try {
-      await habitsApi.create(name, _type);
+      await habitsApi.create(name, _type, variantSlug: _variantSlug);
       ref.invalidate(habitsProvider);
       if (mounted) context.go('/');
     } catch (e) {
@@ -89,41 +90,64 @@ class _AddHabitScreenState extends ConsumerState<AddHabitScreen> {
 
           const SizedBox(height: 28),
 
-          // ── Type ──────────────────────────────────────────────────────────
+          // ── Built-in types ────────────────────────────────────────────────
+          _SectionLabel('BUILT-IN'),
+          const SizedBox(height: 10),
+          _BuiltInOption(
+            variantSlug: 'intermittent_fasting',
+            selected: _variantSlug == 'intermittent_fasting',
+            icon: Icons.local_fire_department_outlined,
+            label: 'Intermittent Fasting',
+            description:
+                'Timer-based fasting tracker with fat burning zone indicator, calorie estimates, and water weight loss.',
+            onTap: () => setState(() {
+              _variantSlug = 'intermittent_fasting';
+              _type = 'timer';
+              if (_nameCtrl.text.trim().isEmpty) {
+                _nameCtrl.text = 'Fasting';
+              }
+            }),
+          ),
+
+          const SizedBox(height: 28),
+
+          // ── Generic type ──────────────────────────────────────────────────
           _SectionLabel('TYPE'),
           const SizedBox(height: 10),
           _TypeOption(
             value: 'timer',
-            selected: _type == 'timer',
+            selected: _variantSlug == null && _type == 'timer',
             icon: Icons.timer_outlined,
             label: 'Timer',
-            description: 'Track time spent on an activity. Start and stop a timer, set a weekly time goal.',
-            onTap: () => setState(() => _type = 'timer'),
+            description:
+                'Track time spent on an activity. Start and stop a timer, set a weekly time goal.',
+            onTap: () => setState(() { _type = 'timer'; _variantSlug = null; }),
           ),
           const SizedBox(height: 10),
           _TypeOption(
             value: 'daily',
-            selected: _type == 'daily',
+            selected: _variantSlug == null && _type == 'daily',
             icon: Icons.track_changes_outlined,
             label: 'Daily',
-            description: 'Log measurable targets each day — steps, glasses of water, calories, etc.',
-            onTap: () => setState(() => _type = 'daily'),
+            description:
+                'Log measurable targets each day — steps, glasses of water, calories, etc.',
+            onTap: () => setState(() { _type = 'daily'; _variantSlug = null; }),
           ),
           const SizedBox(height: 10),
           _TypeOption(
             value: 'todo',
-            selected: _type == 'todo',
+            selected: _variantSlug == null && _type == 'todo',
             icon: Icons.checklist_outlined,
             label: 'To-do',
-            description: 'A weekly checklist of tasks. Add items, check them off, and review past weeks.',
-            onTap: () => setState(() => _type = 'todo'),
+            description:
+                'A weekly checklist of tasks. Add items, check them off, and review past weeks.',
+            onTap: () => setState(() { _type = 'todo'; _variantSlug = null; }),
           ),
 
           if (_error != null) ...[
             const SizedBox(height: 16),
             Text(_error!,
-                style: const TextStyle(
-                    color: AppTheme.secondary, fontSize: 13)),
+                style: const TextStyle(color: AppTheme.secondary, fontSize: 13)),
           ],
 
           const SizedBox(height: 32),
@@ -173,18 +197,41 @@ class _SectionLabel extends StatelessWidget {
       );
 }
 
-// ── White card wrapper ─────────────────────────────────────────────────────
+// ── Built-in option card ───────────────────────────────────────────────────
 
-class _Card extends StatelessWidget {
-  final Widget child;
-  const _Card({required this.child});
+class _BuiltInOption extends StatelessWidget {
+  final String variantSlug;
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final String description;
+  final VoidCallback onTap;
+
+  static const _ifOrange = Color(0xFFE8650A);
+
+  const _BuiltInOption({
+    required this.variantSlug,
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.onTap,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppTheme.surfaceCard,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? _ifOrange : Colors.transparent,
+            width: 2,
+          ),
           boxShadow: const [
             BoxShadow(
                 color: Color(0x0855624D),
@@ -192,11 +239,94 @@ class _Card extends StatelessWidget {
                 offset: Offset(0, 4)),
           ],
         ),
-        child: child,
-      );
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: selected
+                    ? _ifOrange.withOpacity(0.15)
+                    : AppTheme.surfaceNest,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon,
+                  size: 20,
+                  color: selected ? _ifOrange : AppTheme.onSurfaceMuted),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        label,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? _ifOrange : AppTheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _ifOrange.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'BUILT-IN',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            color: _ifOrange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    description,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      color: AppTheme.onSurfaceMuted,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? _ifOrange : Colors.transparent,
+                border: Border.all(
+                  color: selected ? _ifOrange : AppTheme.onSurfaceMuted,
+                  width: 2,
+                ),
+              ),
+              child: selected
+                  ? const Icon(Icons.check, size: 12, color: Colors.white)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-// ── Type option card ───────────────────────────────────────────────────────
+// ── Generic type option card ────────────────────────────────────────────────
 
 class _TypeOption extends StatelessWidget {
   final String value;
@@ -239,7 +369,6 @@ class _TypeOption extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Icon in a tinted circle
             Container(
               width: 40,
               height: 40,
@@ -277,7 +406,6 @@ class _TypeOption extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            // Selection indicator
             AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               width: 20,

@@ -38,10 +38,11 @@ class HabitScreen extends ConsumerWidget {
 
         final type = habit['style_slug'] as String? ?? habit['type'] as String? ?? '';
         final name = habit['name'] as String? ?? '';
+        final variantSlug = habit['variant_slug'] as String? ?? '';
 
         switch (type) {
           case 'timer':
-            return TimerHabitScreen(habitId: habitId, habitName: name);
+            return TimerHabitScreen(habitId: habitId, habitName: name, variantSlug: variantSlug);
           case 'daily':
             return DailyHabitScreen(habitId: habitId, habitName: name);
           case 'todo':
