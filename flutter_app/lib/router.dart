@@ -8,6 +8,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/habit_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/add_habit_screen.dart';
 import 'screens/shell_screen.dart';
 
 class _AuthListenable extends ChangeNotifier {
@@ -51,6 +52,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/auth',
         builder: (_, __) => const AuthScreen(),
+      ),
+
+      // Add habit (outside shell — focused task with own AppBar)
+      GoRoute(
+        path: '/add-habit',
+        builder: (_, __) => const AddHabitScreen(),
       ),
 
       // Main app shell — AppBar + bottom nav wraps all authenticated screens

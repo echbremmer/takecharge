@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../api/habits.dart';
 import '../main.dart';
 import '../providers/habits_provider.dart';
 import '../widgets/habit_card.dart';
@@ -23,7 +22,7 @@ class DashboardScreen extends ConsumerWidget {
       ),
       data: (habits) {
         if (habits.isEmpty) {
-          return _EmptyDashboard(onAdd: () => _showAddSheet(context, ref));
+          return _EmptyDashboard(onAdd: () => context.go('/add-habit'));
         }
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(habitsProvider),
@@ -34,7 +33,7 @@ class DashboardScreen extends ConsumerWidget {
             itemBuilder: (context, i) {
               if (i == habits.length) {
                 return _AddHabitButton(
-                    onTap: () => _showAddSheet(context, ref));
+                    onTap: () => context.go('/add-habit'));
               }
               final habit = habits[i] as Map<String, dynamic>;
               return HabitCard(
@@ -48,17 +47,6 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _AddHabitSheet(ref: ref),
-    );
-  }
 }
 
 class _EmptyDashboard extends StatelessWidget {
@@ -115,94 +103,3 @@ class _AddHabitButton extends StatelessWidget {
   }
 }
 
-class _AddHabitSheet extends ConsumerStatefulWidget {
-  final WidgetRef ref;
-  const _AddHabitSheet({required this.ref});
-
-  @override
-  ConsumerState<_AddHabitSheet> createState() => _AddHabitSheetState();
-}
-
-class _AddHabitSheetState extends ConsumerState<_AddHabitSheet> {
-  final _nameCtrl = TextEditingController();
-  String _type = 'timer';
-  bool _loading = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _create() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) return;
-    setState(() { _loading = true; _error = null; });
-    try {
-      await habitsApi.create(name, _type);
-      ref.invalidate(habitsProvider);
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Add Habit',
-              style: GoogleFonts.manrope(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.primary)),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _nameCtrl,
-            decoration: InputDecoration(
-              hintText: 'Habit name',
-              hintStyle: TextStyle(color: AppTheme.onSurfaceMuted),
-            ),
-            autofocus: true,
-          ),
-          const SizedBox(height: 16),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'timer', label: Text('Timer')),
-              ButtonSegment(value: 'daily', label: Text('Daily')),
-              ButtonSegment(value: 'todo', label: Text('Todo')),
-            ],
-            selected: {_type},
-            onSelectionChanged: (s) => setState(() => _type = s.first),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!,
-                style: const TextStyle(color: AppTheme.secondary, fontSize: 13)),
-          ],
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              onPressed: _loading ? null : _create,
-              child: _loading
-                  ? const SizedBox(
-                      height: 20, width: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Text('Create'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
