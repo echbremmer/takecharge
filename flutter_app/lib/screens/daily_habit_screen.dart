@@ -193,20 +193,6 @@ class _DailyHabitScreenState extends State<DailyHabitScreen> {
 
         const SizedBox(height: 28),
 
-        // ── This week ──────────────────────────────────────────────────────
-        _SectionLabel('THIS WEEK'),
-        const SizedBox(height: 12),
-        _WeekGrid(
-          weekStart: weekStart,
-          targets: _targets,
-          getValue: _getValue,
-          progress: _progress,
-          isAllDone: _isAllDone,
-          hasAnyData: _hasAnyData,
-        ),
-
-        const SizedBox(height: 28),
-
         // ── History ────────────────────────────────────────────────────────
         ..._buildHistory(weekStart),
 
@@ -244,8 +230,7 @@ class _DailyHabitScreenState extends State<DailyHabitScreen> {
         int completeDays = 0;
         bool hasPartial = false;
         for (int i = 0; i < 7; i++) {
-          final dayMs =
-              monday.add(Duration(days: i)).millisecondsSinceEpoch;
+          final dayMs = monday.add(Duration(days: i)).millisecondsSinceEpoch;
           if (_hasAnyData(dayMs)) {
             if (_isAllDone(dayMs)) {
               completeDays++;
@@ -340,7 +325,6 @@ class _DailyHabitScreenState extends State<DailyHabitScreen> {
                     progress: _progress,
                     isAllDone: _isAllDone,
                     hasAnyData: _hasAnyData,
-                    compact: true,
                   ),
                 ),
               ],
@@ -801,7 +785,6 @@ class _WeekGrid extends StatelessWidget {
   final double Function(Map<String, dynamic> t, double value) progress;
   final bool Function(int dayMs) isAllDone;
   final bool Function(int dayMs) hasAnyData;
-  final bool compact;
 
   const _WeekGrid({
     required this.weekStart,
@@ -810,17 +793,14 @@ class _WeekGrid extends StatelessWidget {
     required this.progress,
     required this.isAllDone,
     required this.hasAnyData,
-    this.compact = false,
   });
 
   static const _days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  static const _daysFull = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
-    final todayStart =
-        DateTime(today.year, today.month, today.day);
+    final todayStart = DateTime(today.year, today.month, today.day);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -830,7 +810,6 @@ class _WeekGrid extends StatelessWidget {
         final isFuture = day.isAfter(todayStart);
         final isToday = day.isAtSameMomentAs(todayStart);
 
-        // Build progress and mode lists per target
         final progresses = targets.map((t) {
           final tid = (t['id'] as num).toInt();
           final v = getValue(dayMs, tid);
@@ -841,13 +820,11 @@ class _WeekGrid extends StatelessWidget {
             .map((t) => (t['mode'] as String? ?? 'target') == 'limit')
             .toList();
 
-        final size = compact ? 28.0 : 36.0;
-
         return Column(
           children: [
             SizedBox(
-              width: size,
-              height: size,
+              width: 28,
+              height: 28,
               child: CustomPaint(
                 painter: RingsPainter(
                   progresses: progresses,
@@ -859,15 +836,11 @@ class _WeekGrid extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              compact ? _days[i] : _daysFull[i],
+              _days[i],
               style: GoogleFonts.plusJakartaSans(
-                fontSize: compact ? 10 : 11,
-                color: isToday
-                    ? AppTheme.primary
-                    : AppTheme.onSurfaceMuted,
-                fontWeight: isToday
-                    ? FontWeight.w700
-                    : FontWeight.w400,
+                fontSize: 10,
+                color: isToday ? AppTheme.primary : AppTheme.onSurfaceMuted,
+                fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
               ),
             ),
           ],
@@ -876,4 +849,3 @@ class _WeekGrid extends StatelessWidget {
     );
   }
 }
-
