@@ -323,22 +323,22 @@ class _TimerCardStatusState extends State<_TimerCardStatus> {
       children: [
         // Active indicator dot
         Container(
-          width: 7,
-          height: 7,
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
             color: isActive ? AppTheme.primary : AppTheme.onSurfaceMuted.withAlpha(80),
             shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 7),
+        const SizedBox(width: 8),
         // Status text
         if (isActive)
           Text(
             _fmtElapsed(_elapsedMs),
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 13,
+              fontSize: 26,
               fontWeight: FontWeight.w600,
-              color: AppTheme.primary,
+              color: AppTheme.onSurface,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           )
