@@ -229,41 +229,75 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.surfaceCard,
+        color: Color(0xCCF8FAF3),
         border: Border(top: BorderSide(color: Color(0x26C5C8BE), width: 1)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x0C55624D),
-            blurRadius: 24,
-            offset: Offset(0, -8),
-          ),
-        ],
       ),
       child: SafeArea(
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.dashboard, color: AppTheme.primary, size: 24),
-                const SizedBox(height: 3),
-                Text(
-                  'DASHBOARD',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                    color: AppTheme.primary,
-                  ),
-                ),
-              ],
+        child: Row(
+          children: [
+            _NavItem(
+              icon: Icons.dashboard_outlined,
+              selectedIcon: Icons.dashboard,
+              label: 'Dashboard',
+              selected: true,
+              onTap: onTap,
             ),
-          ),
+            _NavItem(
+              icon: Icons.bar_chart_outlined,
+              selectedIcon: Icons.bar_chart,
+              label: 'Insights',
+              selected: false,
+              onTap: () {},
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppTheme.primary : AppTheme.onSurfaceMuted;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(selected ? selectedIcon : icon, color: color, size: 24),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
