@@ -22,43 +22,46 @@ class HabitCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Habit name
-              Expanded(
-                child: Text(
-                  habit['name'] ?? '',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.onSurfaceVar,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      habit['name'] ?? '',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.onSurfaceVar,
+                      ),
+                    ),
                   ),
-                ),
+                  // Type badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryFixed,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      type,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right, size: 18, color: AppTheme.onSurfaceMuted),
+                ],
               ),
-              // Today rings for daily habits
               if (isDaily) ...[
-                _DailyTodayRings(habitId: (habit['id'] as num).toInt()),
-                const SizedBox(width: 10),
+                const SizedBox(height: 12),
+                _DailyWeekRings(habitId: (habit['id'] as num).toInt()),
               ],
-              // Type badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryFixed,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  type,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                    color: AppTheme.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, size: 18, color: AppTheme.onSurfaceMuted),
             ],
           ),
         ),
@@ -67,18 +70,29 @@ class HabitCard extends StatelessWidget {
   }
 }
 
-class _DailyTodayRings extends StatefulWidget {
+// ── Week rings row ─────────────────────────────────────────────────────────
+
+class _DailyWeekRings extends StatefulWidget {
   final int habitId;
-  const _DailyTodayRings({required this.habitId});
+  const _DailyWeekRings({required this.habitId});
 
   @override
-  State<_DailyTodayRings> createState() => _DailyTodayRingsState();
+  State<_DailyWeekRings> createState() => _DailyWeekRingsState();
 }
 
-class _DailyTodayRingsState extends State<_DailyTodayRings> {
-  List<double> _progresses = [];
-  List<bool> _isLimits = [];
+class _DailyWeekRingsState extends State<_DailyWeekRings> {
+  // logsByDay[dayMs][targetId] = value
+  Map<int, Map<int, double>> _logsByDay = {};
+  List<Map<String, dynamic>> _targets = [];
   bool _loaded = false;
+
+  static const _dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  DateTime get _weekMonday {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return today.subtract(Duration(days: today.weekday - 1));
+  }
 
   int get _todayMs {
     final now = DateTime.now();
@@ -93,37 +107,22 @@ class _DailyTodayRingsState extends State<_DailyTodayRings> {
 
   Future<void> _load() async {
     try {
-      final todayMs = _todayMs;
       final targets = await habitsApi.getTargets(widget.habitId);
-      final logs = await habitsApi.getLogs(widget.habitId, dayMs: todayMs);
+      final logs = await habitsApi.getLogs(widget.habitId);
 
-      // Build targetId → value map from today's logs
-      final logMap = <int, double>{};
+      final logsByDay = <int, Map<int, double>>{};
       for (final log in logs) {
         final l = log as Map<String, dynamic>;
-        logMap[(l['target_id'] as num).toInt()] =
-            (l['value'] as num).toDouble();
-      }
-
-      final progresses = <double>[];
-      final isLimits = <bool>[];
-
-      for (final t in targets) {
-        final m = t as Map<String, dynamic>;
-        final tid = (m['id'] as num).toInt();
-        final tv = (m['target_value'] as num).toDouble();
-        final mode = m['mode'] as String? ?? 'target';
-        final value = logMap[tid] ?? 0.0;
-
-        final prog = tv > 0 ? (value / tv).clamp(0.0, 1.0) : 0.0;
-        progresses.add(prog);
-        isLimits.add(mode == 'limit');
+        final dayMs = (l['day_ms'] as num).toInt();
+        final targetId = (l['target_id'] as num).toInt();
+        final value = (l['value'] as num).toDouble();
+        logsByDay.putIfAbsent(dayMs, () => <int, double>{})[targetId] = value;
       }
 
       if (mounted) {
         setState(() {
-          _progresses = progresses;
-          _isLimits = isLimits;
+          _targets = targets.cast<Map<String, dynamic>>();
+          _logsByDay = logsByDay;
           _loaded = true;
         });
       }
@@ -132,22 +131,64 @@ class _DailyTodayRingsState extends State<_DailyTodayRings> {
     }
   }
 
+  List<double> _progressesFor(int dayMs, bool isFuture) {
+    return _targets.map((t) {
+      if (isFuture) return 0.0;
+      final tid = (t['id'] as num).toInt();
+      final tv = (t['target_value'] as num).toDouble();
+      final value = _logsByDay[dayMs]?[tid] ?? 0.0;
+      return tv > 0 ? (value / tv).clamp(0.0, 1.0) : 0.0;
+    }).toList();
+  }
+
+  List<bool> get _isLimits =>
+      _targets.map((t) => (t['mode'] as String? ?? 'target') == 'limit').toList();
+
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return const SizedBox(width: 36, height: 36);
+      return const SizedBox(height: 44);
     }
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: CustomPaint(
-        painter: RingsPainter(
-          progresses: _progresses,
-          isLimits: _isLimits,
-          isFuture: false,
-          isToday: true,
-        ),
-      ),
+
+    final monday = _weekMonday;
+    final todayMs = _todayMs;
+    final isLimits = _isLimits;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(7, (i) {
+        final day = monday.add(Duration(days: i));
+        final dayMs = day.millisecondsSinceEpoch;
+        final isFuture = dayMs > todayMs;
+        final isToday = dayMs == todayMs;
+        final progresses = _progressesFor(dayMs, isFuture);
+
+        return Column(
+          children: [
+            SizedBox(
+              width: 30,
+              height: 30,
+              child: CustomPaint(
+                painter: RingsPainter(
+                  progresses: progresses,
+                  isLimits: isLimits,
+                  isFuture: isFuture,
+                  isToday: isToday,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _dayLabels[i],
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 10,
+                color: isToday ? AppTheme.primary : AppTheme.onSurfaceMuted,
+                fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
+          ],
+        );
+      }),
     );
   }
 }
