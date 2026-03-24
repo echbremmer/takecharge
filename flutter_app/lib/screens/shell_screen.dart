@@ -51,12 +51,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen>
     _menuCtrl.reverse();
   }
 
-  int get _navIndex {
-    if (widget.location.startsWith('/profile')) return 1;
-    if (widget.location.startsWith('/settings')) return 2;
-    return 0;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,6 +66,17 @@ class _ShellScreenState extends ConsumerState<ShellScreen>
           ),
           onPressed: _toggleMenu,
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Profile',
+            icon: const Icon(Icons.person_outline,
+                color: Color(0xFF2C2C2C)),
+            onPressed: () {
+              _closeMenu();
+              context.go('/profile');
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: const Color(0x26C5C8BE)),
@@ -109,12 +114,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen>
         ],
       ),
       bottomNavigationBar: _BottomNav(
-        selectedIndex: _navIndex,
-        onTap: (i) {
+        onTap: () {
           _closeMenu();
-          if (i == 0) context.go('/');
-          if (i == 1) context.go('/profile');
-          if (i == 2) context.go('/settings');
+          context.go('/');
         },
       ),
     );
@@ -220,10 +222,8 @@ class _MenuItem extends StatelessWidget {
 // ── Bottom navigation bar ─────────────────────────────────────────────────
 
 class _BottomNav extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onTap;
-
-  const _BottomNav({required this.selectedIndex, required this.onTap});
+  final VoidCallback onTap;
+  const _BottomNav({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -239,27 +239,31 @@ class _BottomNav extends StatelessWidget {
           ),
         ],
       ),
-      child: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onTap,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'HOME',
+      child: SafeArea(
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.dashboard, color: AppTheme.primary, size: 24),
+                const SizedBox(height: 3),
+                Text(
+                  'DASHBOARD',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                    color: AppTheme.primary,
+                  ),
+                ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'PROFILE',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'SETTINGS',
-          ),
-        ],
+        ),
       ),
     );
   }
 }
+
