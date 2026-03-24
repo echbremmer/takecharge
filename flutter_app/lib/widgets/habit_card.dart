@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../api/habits.dart';
 import '../main.dart';
+import 'if_phase_badges.dart';
 import 'rings_painter.dart';
 
 class HabitCard extends StatelessWidget {
@@ -637,8 +638,6 @@ class _IFCardStatusState extends State<_IFCardStatus> {
   bool _loaded = false;
   Timer? _ticker;
 
-  static const _fatBurningThresholdMs = 12 * 3600 * 1000;
-
   int get _elapsedMs => _activeStartMs != null
       ? DateTime.now().millisecondsSinceEpoch - _activeStartMs!
       : 0;
@@ -681,7 +680,6 @@ class _IFCardStatusState extends State<_IFCardStatus> {
 
     final isActive = _activeStartMs != null;
     final elapsed = _elapsedMs;
-    final fatBurning = elapsed >= _fatBurningThresholdMs;
     final kcal = (elapsed / 3600000 * 70).round();
 
     return Column(
@@ -719,62 +717,10 @@ class _IFCardStatusState extends State<_IFCardStatus> {
         ),
         if (isActive) ...[
           const SizedBox(height: 6),
-          _IFFatBurningRow(
-            fatBurning: fatBurning,
-            fatBurningInMs: fatBurning ? 0 : _fatBurningThresholdMs - elapsed,
-          ),
+          IFPhaseBadges(elapsedMs: elapsed),
         ],
       ],
     );
   }
 }
 
-// ── IF fat burning row ─────────────────────────────────────────────────────
-
-class _IFFatBurningRow extends StatelessWidget {
-  final bool fatBurning;
-  final int fatBurningInMs;
-
-  static const _orange = Color(0xFFE8650A);
-
-  const _IFFatBurningRow(
-      {required this.fatBurning, required this.fatBurningInMs});
-
-  @override
-  Widget build(BuildContext context) {
-    if (fatBurning) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: _orange.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🔥', style: TextStyle(fontSize: 11)),
-            const SizedBox(width: 4),
-            Text(
-              'Fat burning active',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _orange,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final h = fatBurningInMs ~/ 3600000;
-    final m = (fatBurningInMs % 3600000) ~/ 60000;
-    final timeStr = h > 0 ? '${h}h ${m}m' : '${m}m';
-
-    return Text(
-      'Fat burning in $timeStr',
-      style: GoogleFonts.plusJakartaSans(
-          fontSize: 11, color: AppTheme.onSurfaceMuted),
-    );
-  }
-}
