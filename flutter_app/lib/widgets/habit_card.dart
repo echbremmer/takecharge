@@ -174,7 +174,7 @@ class _DailyWeekRingsState extends State<_DailyWeekRings> {
                   isLimits: isLimits,
                   isFuture: isFuture,
                   isToday: isToday,
-                  ringWidthScale: 0.5,
+                  ringWidthScale: 0.7,
                 ),
               ),
             ),
