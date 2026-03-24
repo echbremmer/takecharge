@@ -60,23 +60,31 @@ class _AddHabitScreenState extends ConsumerState<AddHabitScreen> {
           // ── Name ──────────────────────────────────────────────────────────
           _SectionLabel('NAME'),
           const SizedBox(height: 10),
-          _Card(
-            child: TextField(
-              controller: _nameCtrl,
-              autofocus: true,
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15, color: AppTheme.onSurface),
-              decoration: InputDecoration(
-                hintText: 'e.g. Morning run, Reading…',
-                hintStyle: GoogleFonts.plusJakartaSans(
-                    fontSize: 15, color: AppTheme.onSurfaceMuted),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _create(),
+          TextField(
+            controller: _nameCtrl,
+            autofocus: true,
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 15, color: AppTheme.onSurface),
+            decoration: InputDecoration(
+              hintText: 'e.g. Morning run, Reading…',
+              hintStyle: GoogleFonts.plusJakartaSans(
+                  fontSize: 15, color: AppTheme.onSurfaceMuted),
+              filled: true,
+              fillColor: AppTheme.surfaceCard,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
             ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _create(),
           ),
 
           const SizedBox(height: 28),
