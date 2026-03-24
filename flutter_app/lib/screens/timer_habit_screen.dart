@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../api/habits.dart';
 import '../main.dart';
+import '../widgets/if_phase_badges.dart';
 
 class TimerHabitScreen extends ConsumerStatefulWidget {
   final int habitId;
@@ -976,9 +977,7 @@ class _IFStatsPanel extends StatelessWidget {
   final int elapsedMs;
   final bool isActive;
 
-  static const _fatBurningThresholdMs = 12 * 3600 * 1000;
   static const _targetMs = 16 * 3600 * 1000;
-  static const _orange = Color(0xFFE8650A);
 
   const _IFStatsPanel({required this.elapsedMs, required this.isActive});
 
@@ -993,19 +992,11 @@ class _IFStatsPanel extends StatelessWidget {
     if (!isActive) return const SizedBox.shrink();
 
     final progress = (elapsedMs / _targetMs).clamp(0.0, 1.0);
-    final fatBurning = elapsedMs >= _fatBurningThresholdMs;
-    final fatBurningInMs = fatBurning ? 0 : _fatBurningThresholdMs - elapsedMs;
     final kcal = (elapsedMs / 3600000 * 70).round();
     final water = _estimateWater(elapsedMs);
     final h = elapsedMs ~/ 3600000;
     final m = (elapsedMs % 3600000) ~/ 60000;
     final targetH = _targetMs ~/ 3600000;
-
-    String fatBurningLabel() {
-      final fbH = fatBurningInMs ~/ 3600000;
-      final fbM = (fatBurningInMs % 3600000) ~/ 60000;
-      return 'Fat burning in ${fbH > 0 ? '${fbH}h ${fbM}m' : '${fbM}m'}';
-    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1047,39 +1038,8 @@ class _IFStatsPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          if (fatBurning)
-            Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: _orange.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🔥', style: TextStyle(fontSize: 13)),
-                  const SizedBox(width: 5),
-                  Text(
-                    'Fat burning active',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _orange,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                fatBurningLabel(),
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, color: AppTheme.onSurfaceMuted),
-              ),
-            ),
+          IFPhaseBadges(elapsedMs: elapsedMs),
+          const SizedBox(height: 12),
           Row(
             children: [
               _EstimateChip(
