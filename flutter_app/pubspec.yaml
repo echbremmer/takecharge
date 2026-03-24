@@ -31,6 +31,9 @@ dependencies:
   # Fonts (Manrope + Plus Jakarta Sans — matching the web frontend exactly)
   google_fonts: ^6.2.1
 
+  # Flip counter animation
+  animated_flip_counter: ^0.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

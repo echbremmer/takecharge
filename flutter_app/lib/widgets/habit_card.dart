@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:animated_flip_counter/animated_flip_counter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../api/habits.dart';
@@ -292,15 +293,6 @@ class _TimerCardStatusState extends State<_TimerCardStatus> {
     }
   }
 
-  String _fmtElapsed(int ms) {
-    if (ms < 0) ms = 0;
-    final s = ms ~/ 1000;
-    final h = s ~/ 3600;
-    final m = (s % 3600) ~/ 60;
-    final sec = s % 60;
-    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-  }
-
   String _fmtCompact(int ms) {
     if (ms < 0) ms = 0;
     final totalMin = ms ~/ 60000;
@@ -330,18 +322,10 @@ class _TimerCardStatusState extends State<_TimerCardStatus> {
             shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 8),
-        // Status text
+        const SizedBox(width: 10),
+        // Status: flip clock when active, plain text when not
         if (isActive)
-          Text(
-            _fmtElapsed(_elapsedMs),
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 26,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.onSurface,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          )
+          _FlipClock(elapsedMs: _elapsedMs)
         else
           Text(
             'Inactive',
@@ -379,6 +363,71 @@ class _TimerCardStatusState extends State<_TimerCardStatus> {
                   ),
                 ),
         ],
+      ],
+    );
+  }
+}
+
+// ── Flip clock (HH:MM:SS) ─────────────────────────────────────────────────
+
+class _FlipClock extends StatelessWidget {
+  final int elapsedMs;
+  const _FlipClock({required this.elapsedMs});
+
+  static const _digitStyle = TextStyle(
+    fontFamily: 'monospace',
+    fontSize: 26,
+    fontWeight: FontWeight.w700,
+    color: Colors.white,
+    letterSpacing: 1,
+  );
+
+
+  static const _charcoal = Color(0xFF2C2C2C);
+
+  Widget _segment(int value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      decoration: BoxDecoration(
+        color: _charcoal,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: AnimatedFlipCounter(
+        value: value,
+        wholeDigits: 2,
+        textStyle: _digitStyle,
+      ),
+    );
+  }
+
+  Widget _colon() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 6, height: 6, decoration: const BoxDecoration(color: _charcoal, shape: BoxShape.circle)),
+            const SizedBox(height: 6),
+            Container(width: 6, height: 6, decoration: const BoxDecoration(color: _charcoal, shape: BoxShape.circle)),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final totalSec = (elapsedMs / 1000).floor().clamp(0, double.maxFinite.toInt());
+    final h = totalSec ~/ 3600;
+    final m = (totalSec % 3600) ~/ 60;
+    final s = totalSec % 60;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _segment(h),
+        _colon(),
+        _segment(m),
+        _colon(),
+        _segment(s),
       ],
     );
   }
