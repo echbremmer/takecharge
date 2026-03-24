@@ -1034,7 +1034,7 @@ class _IFStatsPanel extends StatelessWidget {
               minHeight: 6,
               backgroundColor: AppTheme.surfaceCard,
               valueColor: AlwaysStoppedAnimation<Color>(
-                  progress >= 1.0 ? AppTheme.primary : _orange),
+                  progress >= 1.0 ? AppTheme.primary : const Color(0xFFE8650A)),
             ),
           ),
           const SizedBox(height: 12),
