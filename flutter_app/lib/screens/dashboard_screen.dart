@@ -22,7 +22,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final ids = _habits.map<int>((h) => h['id'] as int).toList();
     try {
       await habitsApi.reorder(ids);
-    } catch (_) {}
+    } finally {
+      ref.invalidate(habitsProvider);
+    }
   }
 
   @override
@@ -44,10 +46,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final Widget content = _habits.isEmpty
             ? _EmptyDashboard()
             : RefreshIndicator(
-                onRefresh: () async {
-                  setState(() => _habits = []);
-                  ref.invalidate(habitsProvider);
-                },
+                onRefresh: () async => ref.invalidate(habitsProvider),
                 child: ReorderableListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
                   buildDefaultDragHandles: false,
