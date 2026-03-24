@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../api/habits.dart';
@@ -15,6 +16,7 @@ class HabitCard extends StatelessWidget {
     final slug = habit['style_slug'] as String? ?? habit['type'] as String? ?? '';
     final type = slug.toUpperCase();
     final isDaily = slug == 'daily';
+    final isTimer = slug == 'timer';
 
     return Card(
       child: InkWell(
@@ -61,6 +63,10 @@ class HabitCard extends StatelessWidget {
               if (isDaily) ...[
                 const SizedBox(height: 12),
                 _DailyWeekRings(habitId: (habit['id'] as num).toInt()),
+              ],
+              if (isTimer) ...[
+                const SizedBox(height: 10),
+                _TimerCardStatus(habitId: (habit['id'] as num).toInt()),
               ],
             ],
           ),
@@ -190,6 +196,190 @@ class _DailyWeekRingsState extends State<_DailyWeekRings> {
           ],
         );
       }),
+    );
+  }
+}
+
+// ── Timer card status row ──────────────────────────────────────────────────
+
+class _TimerCardStatus extends StatefulWidget {
+  final int habitId;
+  const _TimerCardStatus({required this.habitId});
+
+  @override
+  State<_TimerCardStatus> createState() => _TimerCardStatusState();
+}
+
+class _TimerCardStatusState extends State<_TimerCardStatus> {
+  int? _activeStartMs;
+  int _weekSessionsMs = 0;
+  int? _goalMs;
+  bool _loaded = false;
+  Timer? _ticker;
+
+  DateTime _weekMonday(DateTime dt) {
+    final d = DateTime(dt.year, dt.month, dt.day);
+    return d.subtract(Duration(days: d.weekday - 1));
+  }
+
+  String _weekKey(DateTime mon) =>
+      '${mon.year}-${mon.month.toString().padLeft(2, '0')}-${mon.day.toString().padLeft(2, '0')}';
+
+  int get _elapsedMs => _activeStartMs != null
+      ? DateTime.now().millisecondsSinceEpoch - _activeStartMs!
+      : 0;
+
+  int get _totalMs => _weekSessionsMs + _elapsedMs;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final results = await Future.wait([
+        habitsApi.getActive(widget.habitId),
+        habitsApi.getSessions(widget.habitId),
+        habitsApi.getGoals(widget.habitId),
+      ]);
+
+      final active = results[0] as Map<String, dynamic>?;
+      final sessions = results[1] as List<dynamic>;
+      final goals = results[2] as List<dynamic>;
+
+      final curKey = _weekKey(_weekMonday(DateTime.now()));
+      final weekMs = sessions
+          .where((s) =>
+              _weekKey(_weekMonday(DateTime.fromMillisecondsSinceEpoch(
+                  (s as Map)['start'] as int))) ==
+              curKey)
+          .fold<int>(0, (sum, s) => sum + ((s as Map)['duration'] as int));
+
+      int? goalMs;
+      for (final g in goals) {
+        final m = g as Map<String, dynamic>;
+        final dt = DateTime.fromMillisecondsSinceEpoch(m['week_start_ms'] as int);
+        if (_weekKey(_weekMonday(dt)) == curKey) {
+          goalMs = m['value'] as int;
+          break;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _activeStartMs = active != null ? active['start'] as int : null;
+          _weekSessionsMs = weekMs;
+          _goalMs = goalMs;
+          _loaded = true;
+        });
+        if (_activeStartMs != null) {
+          _ticker?.cancel();
+          _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+            if (mounted) setState(() {});
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  String _fmtElapsed(int ms) {
+    if (ms < 0) ms = 0;
+    final s = ms ~/ 1000;
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  }
+
+  String _fmtCompact(int ms) {
+    if (ms < 0) ms = 0;
+    final totalMin = ms ~/ 60000;
+    final h = totalMin ~/ 60;
+    final m = totalMin % 60;
+    if (h > 0 && m > 0) return '${h}h ${m}m';
+    if (h > 0) return '${h}h';
+    return '${m}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox(height: 20);
+
+    final isActive = _activeStartMs != null;
+    final total = _totalMs;
+    final goalReached = _goalMs != null && total >= _goalMs!;
+
+    return Row(
+      children: [
+        // Active indicator dot
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: isActive ? AppTheme.primary : AppTheme.onSurfaceMuted.withAlpha(80),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 7),
+        // Status text
+        if (isActive)
+          Text(
+            _fmtElapsed(_elapsedMs),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          )
+        else
+          Text(
+            'Inactive',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              color: AppTheme.onSurfaceMuted,
+            ),
+          ),
+        const Spacer(),
+        // Week total
+        Text(
+          'This week: ${_fmtCompact(total)}',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12,
+            color: AppTheme.onSurfaceMuted,
+          ),
+        ),
+        // Goal status
+        if (_goalMs != null) ...[
+          const SizedBox(width: 6),
+          goalReached
+              ? Text(
+                  '✓',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primary,
+                  ),
+                )
+              : Text(
+                  '/ ${_fmtCompact(_goalMs!)}',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: AppTheme.onSurfaceMuted,
+                  ),
+                ),
+        ],
+      ],
     );
   }
 }
