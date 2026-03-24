@@ -450,6 +450,7 @@ class _TodoCardStatus extends StatefulWidget {
 
 class _TodoCardStatusState extends State<_TodoCardStatus> {
   List<Map<String, dynamic>> _todos = [];
+  int _extraCount = 0;
   final Map<int, Timer> _removalTimers = {};
   final Set<int> _pendingRemoval = {};
   bool _loaded = false;
@@ -477,11 +478,12 @@ class _TodoCardStatusState extends State<_TodoCardStatus> {
       final todos = await habitsApi.getTodos(widget.habitId, weekMs: _currentWeekMs);
       if (mounted) {
         setState(() {
-          _todos = todos
+          final unchecked = todos
               .cast<Map<String, dynamic>>()
               .where((t) => !(t['checked'] as bool? ?? false))
-              .take(4)
               .toList();
+          _todos = unchecked.take(4).toList();
+          _extraCount = (unchecked.length - 4).clamp(0, 999);
           _loaded = true;
         });
       }
@@ -526,15 +528,29 @@ class _TodoCardStatusState extends State<_TodoCardStatus> {
     if (_todos.isEmpty) return const SizedBox.shrink();
 
     return Column(
-      children: _todos.map((t) {
-        final id = (t['id'] as num).toInt();
-        final isPending = _pendingRemoval.contains(id);
-        return _TodoCardItem(
-          todo: t,
-          isPending: isPending,
-          onTap: isPending ? () => _undo(t) : () => _check(t),
-        );
-      }).toList(),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ..._todos.map((t) {
+          final id = (t['id'] as num).toInt();
+          final isPending = _pendingRemoval.contains(id);
+          return _TodoCardItem(
+            todo: t,
+            isPending: isPending,
+            onTap: isPending ? () => _undo(t) : () => _check(t),
+          );
+        }),
+        if (_extraCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '+ $_extraCount more',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: AppTheme.onSurfaceMuted,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
