@@ -34,6 +34,16 @@ class IFPhaseBadges extends StatelessWidget {
             ? Colors.transparent
             : (nextEarned ? _phases[i + 1].color : _dimColor);
 
+        final isFirst = i == 0;
+        final radius = const Radius.circular(6);
+        final borderRadius = isFirst && isLast
+            ? BorderRadius.all(radius)
+            : isFirst
+                ? BorderRadius.only(topLeft: radius, bottomLeft: radius)
+                : isLast
+                    ? BorderRadius.only(topRight: radius, bottomRight: radius)
+                    : BorderRadius.zero;
+
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -41,7 +51,10 @@ class IFPhaseBadges extends StatelessWidget {
             Container(
               height: _segmentHeight,
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              color: segColor,
+              decoration: BoxDecoration(
+                color: segColor,
+                borderRadius: borderRadius,
+              ),
               alignment: Alignment.center,
               child: Text(
                 phase.label,
