@@ -3,31 +3,58 @@ import 'package:google_fonts/google_fonts.dart';
 
 // Intermittent fasting phase badges in Agnoster/powerline style.
 // All 4 phases are always shown; unearned phases are greyed out.
-// Earned phases flow left-to-right with a filled arrow connector between them.
-class IFPhaseBadges extends StatelessWidget {
+// The active (last earned) phase pulses gently.
+class IFPhaseBadges extends StatefulWidget {
   final int elapsedMs;
-
-  static const _phases = [
-    _Phase(ms: 0,                 label: 'Digesting',   color: Color(0xFF60A5FA)),
-    _Phase(ms: 12 * 3600 * 1000, label: 'Fat burning',  color: Color(0xFFE8650A)),
-    _Phase(ms: 18 * 3600 * 1000, label: 'Ketosis',      color: Color(0xFF8B5CF6)),
-    _Phase(ms: 24 * 3600 * 1000, label: 'Autophagy',    color: Color(0xFF0D9488)),
-  ];
-
-  static const _dimColor = Color(0xFFD1D5DB);
-  static const _segmentHeight = 26.0;
 
   const IFPhaseBadges({super.key, required this.elapsedMs});
 
   @override
+  State<IFPhaseBadges> createState() => _IFPhaseBadgesState();
+}
+
+class _IFPhaseBadgesState extends State<IFPhaseBadges>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 1.0, end: 0.55).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Active phase = last earned phase index
+    int activeIdx = -1;
+    for (int i = _phases.length - 1; i >= 0; i--) {
+      if (widget.elapsedMs >= _phases[i].ms) {
+        activeIdx = i;
+        break;
+      }
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(_phases.length, (i) {
         final phase = _phases[i];
-        final earned = elapsedMs >= phase.ms;
-        final nextEarned = i + 1 < _phases.length && elapsedMs >= _phases[i + 1].ms;
+        final earned = widget.elapsedMs >= phase.ms;
+        final nextEarned = i + 1 < _phases.length && widget.elapsedMs >= _phases[i + 1].ms;
         final isLast = i == _phases.length - 1;
+        final isActive = i == activeIdx;
 
         final segColor = earned ? phase.color : _dimColor;
         final nextSegColor = isLast
@@ -35,43 +62,56 @@ class IFPhaseBadges extends StatelessWidget {
             : (nextEarned ? _phases[i + 1].color : _dimColor);
 
         final isFirst = i == 0;
-        final radius = const Radius.circular(6);
+        const radius = Radius.circular(6);
         final borderRadius = isFirst && isLast
-            ? BorderRadius.all(radius)
+            ? const BorderRadius.all(radius)
             : isFirst
-                ? BorderRadius.only(topLeft: radius, bottomLeft: radius)
+                ? const BorderRadius.only(topLeft: radius, bottomLeft: radius)
                 : isLast
-                    ? BorderRadius.only(topRight: radius, bottomRight: radius)
+                    ? const BorderRadius.only(topRight: radius, bottomRight: radius)
                     : BorderRadius.zero;
+
+        Widget segment = Container(
+          height: _segmentHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: segColor,
+            borderRadius: borderRadius,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            phase.label,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        );
+
+        if (isActive) {
+          segment = AnimatedBuilder(
+            animation: _pulse,
+            builder: (_, child) => Opacity(opacity: _pulse.value, child: child),
+            child: segment,
+          );
+        }
 
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Segment body
-            Container(
-              height: _segmentHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: segColor,
-                borderRadius: borderRadius,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                phase.label,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            // Arrow connector (skip after last segment)
+            segment,
             if (!isLast)
-              CustomPaint(
-                size: const Size(10, _segmentHeight),
-                painter: _ArrowPainter(
-                  leftColor: segColor,
-                  rightColor: nextSegColor,
+              AnimatedBuilder(
+                animation: isActive ? _pulse : const AlwaysStoppedAnimation(1.0),
+                builder: (_, __) => CustomPaint(
+                  size: const Size(10, _segmentHeight),
+                  painter: _ArrowPainter(
+                    leftColor: isActive
+                        ? segColor.withOpacity(_pulse.value)
+                        : segColor,
+                    rightColor: nextSegColor,
+                  ),
                 ),
               ),
           ],
@@ -80,6 +120,16 @@ class IFPhaseBadges extends StatelessWidget {
     );
   }
 }
+
+const _phases = [
+  _Phase(ms: 0,                 label: 'Digesting',   color: Color(0xFF60A5FA)),
+  _Phase(ms: 12 * 3600 * 1000, label: 'Fat burning',  color: Color(0xFFE8650A)),
+  _Phase(ms: 18 * 3600 * 1000, label: 'Ketosis',      color: Color(0xFF8B5CF6)),
+  _Phase(ms: 24 * 3600 * 1000, label: 'Autophagy',    color: Color(0xFF0D9488)),
+];
+
+const _dimColor = Color(0xFFD1D5DB);
+const _segmentHeight = 26.0;
 
 // Paints the powerline arrow: left half filled with leftColor,
 // right half filled with rightColor, divided by a right-pointing chevron.
