@@ -89,32 +89,40 @@ class _IFPhaseBadgesState extends State<IFPhaseBadges>
           ),
         );
 
-        Widget row = Row(
+        // Pulse only the segment body and the triangle — NOT the connector
+        // background (rightColor). If rightColor fades, its corners expose
+        // the app background while the next segment stays fully opaque.
+        final body = isActive
+            ? AnimatedBuilder(
+                animation: _pulse,
+                builder: (_, child) =>
+                    Opacity(opacity: _pulse.value, child: child),
+                child: segment,
+              )
+            : segment;
+
+        final connector = !isLast
+            ? AnimatedBuilder(
+                animation: isActive ? _pulse : const AlwaysStoppedAnimation(1.0),
+                builder: (_, __) => CustomPaint(
+                  size: const Size(10, _segmentHeight),
+                  painter: _ArrowPainter(
+                    leftColor: isActive
+                        ? segColor.withOpacity(_pulse.value)
+                        : segColor,
+                    rightColor: nextSegColor, // always full opacity
+                  ),
+                ),
+              )
+            : null;
+
+        return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            segment,
-            if (!isLast)
-              CustomPaint(
-                size: const Size(10, _segmentHeight),
-                painter: _ArrowPainter(
-                  leftColor: segColor,
-                  rightColor: nextSegColor,
-                ),
-              ),
+            body,
+            if (connector != null) connector,
           ],
         );
-
-        // Wrap the entire segment+connector in one Opacity so the
-        // connector background pulses together with the segment body.
-        if (isActive) {
-          row = AnimatedBuilder(
-            animation: _pulse,
-            builder: (_, child) => Opacity(opacity: _pulse.value, child: child),
-            child: row,
-          );
-        }
-
-        return row;
       }),
     );
   }
