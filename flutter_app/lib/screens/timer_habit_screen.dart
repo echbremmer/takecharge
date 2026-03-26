@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:animated_flip_counter/animated_flip_counter.dart';
+
 import '../api/habits.dart';
 import '../main.dart';
 import '../widgets/if_phase_badges.dart';
@@ -24,15 +26,10 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
   // ── Timer state ────────────────────────────────────────────────────────────
   int? _activeStartMs;
   List<dynamic> _sessions = [];
-  final Map<String, Map<String, dynamic>> _goals = {}; // weekKey → goal
+  int? _sessionGoalMs;
   bool _loading = true;
   Timer? _ticker;
 
-  // ── Dial state ─────────────────────────────────────────────────────────────
-  final _dialKey = GlobalKey();
-  double _dialAngle = 0; // degrees (for visual rotation)
-  double _dialAccum = 0; // accumulated degrees for threshold detection
-  double? _dialLastAngle;
 
   // ── History UI state ───────────────────────────────────────────────────────
   String? _openWeekKey;
@@ -63,11 +60,11 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
       final goals = results[2] as List<dynamic>;
 
       _sessions = sessions;
-      _goals.clear();
-      for (final g in goals) {
-        final dt = DateTime.fromMillisecondsSinceEpoch(g['week_start_ms'] as int);
-        _goals[_weekKey(_weekMonday(dt))] = g as Map<String, dynamic>;
-      }
+      // Find session goal (stored with week_start_ms == 0 as sentinel)
+      final sessionGoal = goals.cast<Map<String, dynamic>>()
+          .where((g) => (g['week_start_ms'] as int) == 0)
+          .firstOrNull;
+      _sessionGoalMs = sessionGoal != null ? sessionGoal['value'] as int : null;
 
       if (active != null) {
         _activeStartMs = active['start'] as int;
@@ -107,8 +104,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
       _ticker?.cancel();
       setState(() {
         _activeStartMs = null;
-        _dialAngle = 0;
-        _dialAccum = 0;
       });
     } else {
       // Start
@@ -120,76 +115,55 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
     await _load();
   }
 
-  // ── Dial ──────────────────────────────────────────────────────────────────
-  double _getAngle(Offset globalPos) {
-    final box = _dialKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return 0;
-    final center =
-        box.localToGlobal(Offset(box.size.width / 2, box.size.height / 2));
-    return atan2(globalPos.dy - center.dy, globalPos.dx - center.dx) *
-        180 /
-        pi;
-  }
-
-  void _onDialPanStart(DragStartDetails d) {
-    _dialLastAngle = _getAngle(d.globalPosition);
-    _dialAccum = 0;
-  }
-
-  void _onDialPanUpdate(DragUpdateDetails d) {
-    if (_activeStartMs == null || _dialLastAngle == null) return;
-    var delta = _getAngle(d.globalPosition) - _dialLastAngle!;
-    if (delta > 180) delta -= 360;
-    if (delta < -180) delta += 360;
-    _dialLastAngle = _getAngle(d.globalPosition);
-    _dialAngle += delta;
-    _dialAccum += delta;
-    const threshold = 30.0;
-    const fiveMin = 5 * 60 * 1000;
-
-    while (_dialAccum >= threshold) {
-      _dialAccum -= threshold;
-      _adjustStart(-fiveMin);
-    }
-    while (_dialAccum <= -threshold) {
-      _dialAccum += threshold;
-      _adjustStart(fiveMin);
-    }
-    setState(() {});
-  }
-
-  void _adjustStart(int deltaMs) {
+  // ── Time picker ───────────────────────────────────────────────────────────
+  Future<void> _pickStartTime() async {
     if (_activeStartMs == null) return;
-    final newStart = _activeStartMs! + deltaMs;
+    final current = DateTime.fromMillisecondsSinceEpoch(_activeStartMs!);
+
+    // First pick date (in case fast started yesterday)
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now().subtract(const Duration(days: 7)),
+      lastDate: DateTime.now(),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (time == null || !mounted) return;
+
+    final newStart = DateTime(
+      date.year, date.month, date.day, time.hour, time.minute,
+    ).millisecondsSinceEpoch;
+
     if (newStart >= DateTime.now().millisecondsSinceEpoch) return;
     setState(() => _activeStartMs = newStart);
     habitsApi.adjustActive(widget.habitId, newStart);
   }
 
-  // ── Week goal ─────────────────────────────────────────────────────────────
-  void _showGoalDialog() {
-    final goal = _goals[_weekKey(_weekMonday(DateTime.now()))];
-    final parts = goal != null
-        ? _msToGoalParts(goal['value'] as int)
+  // ── Session goal ──────────────────────────────────────────────────────────
+  void _showSessionGoalDialog() {
+    final parts = _sessionGoalMs != null
+        ? _msToGoalParts(_sessionGoalMs!)
         : {'d': 0, 'h': 16, 'm': 0};
 
-    int d = parts['d']!, h = parts['h']!, m = parts['m']!;
+    int h = parts['h']!, m = parts['m']!;
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           backgroundColor: AppTheme.surfaceCard,
-          title: Text('Set week goal',
+          title: Text('Set session goal',
               style: GoogleFonts.manrope(
                   fontWeight: FontWeight.w700, color: AppTheme.primary)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(children: [
-                _GoalInput(label: 'Days', value: d, min: 0, max: 6,
-                    onChanged: (v) => setS(() => d = v)),
-                const SizedBox(width: 12),
-                _GoalInput(label: 'Hours', value: h, min: 0, max: 23,
+                _GoalInput(label: 'Hours', value: h, min: 0, max: 72,
                     onChanged: (v) => setS(() => h = v)),
                 const SizedBox(width: 12),
                 _GoalInput(label: 'Min', value: m, min: 0, max: 55, step: 5,
@@ -205,12 +179,11 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(ctx);
-                final ms = (d * 86400 + h * 3600 + m * 60) * 1000;
+                final ms = (h * 3600 + m * 60) * 1000;
                 if (ms <= 0) return;
-                final weekStartMs = _weekMonday(DateTime.now()).millisecondsSinceEpoch;
-                final result = await habitsApi.setGoal(
-                    widget.habitId, weekStartMs, ms);
-                setState(() => _goals[_weekKey(_weekMonday(DateTime.now()))] = result);
+                // Use week_start_ms = 0 as sentinel for session goal
+                await habitsApi.setGoal(widget.habitId, 0, ms);
+                setState(() => _sessionGoalMs = ms);
               },
               child: const Text('Save'),
             ),
@@ -289,17 +262,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
   String _formatWeight(double g) =>
       g >= 1000 ? '${(g / 1000).toStringAsFixed(2)} kg' : '${g.round()} g';
 
-  // ── Current week stats ─────────────────────────────────────────────────────
-  int get _curWeekSessionsMs {
-    final curKey = _weekKey(_weekMonday(DateTime.now()));
-    return _sessions
-        .where((s) =>
-            _weekKey(_weekMonday(
-                DateTime.fromMillisecondsSinceEpoch(s['start'] as int))) ==
-            curKey)
-        .fold(0, (sum, s) => sum + (s['duration'] as int));
-  }
-
   int get _elapsedMs => _activeStartMs != null
       ? DateTime.now().millisecondsSinceEpoch - _activeStartMs!
       : 0;
@@ -312,9 +274,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
     }
 
     final isActive = _activeStartMs != null;
-    final curKey = _weekKey(_weekMonday(DateTime.now()));
-    final weekGoal = _goals[curKey];
-    final totalMs = _curWeekSessionsMs + _elapsedMs;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 80),
@@ -347,88 +306,29 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
             ),
             const SizedBox(height: 4),
 
-            // Timer display
-            Text(
-              _formatDuration(_elapsedMs),
-              style: GoogleFonts.manrope(
-                fontSize: 56,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 56 * 0.02,
-                color: AppTheme.onSurface,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
+            // Timer display — flip clock style
+            _BigFlipClock(elapsedMs: _elapsedMs),
 
-            // Start time
+            // Start time + inline edit button
             if (isActive) ...[
-              Text(
-                'Started at ${_formatTime(_activeStartMs!)}',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  color: AppTheme.onSurfaceMuted,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Dial
-              Column(
-                children: [
-                  Text(
-                    'Adjust start time',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      color: AppTheme.onSurfaceMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onPanStart: _onDialPanStart,
-                    onPanUpdate: _onDialPanUpdate,
-                    child: Transform.rotate(
-                      angle: _dialAngle * pi / 180,
-                      child: Container(
-                        key: _dialKey,
-                        width: 160,
-                        height: 160,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppTheme.surfaceNest,
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x1E55624D),
-                              blurRadius: 40,
-                              offset: Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: Container(
-                            margin: const EdgeInsets.only(top: 12),
-                            width: 6,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(2),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [AppTheme.primary, AppTheme.primaryCont],
-                              ),
-                            ),
-                          ),
-                        ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _pickStartTime,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Started at ${_formatTime(_activeStartMs!)}',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        color: AppTheme.onSurfaceMuted,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Spin to move start back by 5 min',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: AppTheme.onSurfaceMuted,
-                    ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Icon(Icons.edit_outlined,
+                        size: 14, color: AppTheme.onSurfaceMuted),
+                  ],
+                ),
               ),
             ],
 
@@ -447,17 +347,26 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
 
         // ── IF stats panel (only for IF variant) ─────────────────────────────
         if (widget.variantSlug == 'intermittent_fasting') ...[
-          _IFStatsPanel(elapsedMs: _elapsedMs, isActive: isActive),
+          _IFStatsPanel(
+            elapsedMs: _elapsedMs,
+            isActive: isActive,
+            sessionGoalMs: _sessionGoalMs,
+            onSetGoal: _showSessionGoalDialog,
+          ),
           const SizedBox(height: 16),
         ],
 
-        // ── Week goal card ───────────────────────────────────────────────────
-        _WeekGoalCard(
-          goal: weekGoal,
-          totalMs: totalMs,
-          formatGoalTime: _formatGoalTime,
-          onEdit: _showGoalDialog,
-        ),
+        // ── This session card (non-IF timers only) ───────────────────────────
+        if (widget.variantSlug != 'intermittent_fasting') ...[
+          _ThisSessionCard(
+            elapsedMs: _elapsedMs,
+            isActive: isActive,
+            sessionGoalMs: _sessionGoalMs,
+            formatGoalTime: _formatGoalTime,
+            onSetGoal: _showSessionGoalDialog,
+          ),
+          const SizedBox(height: 16),
+        ],
 
         const SizedBox(height: 32),
 
@@ -521,7 +430,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
       final label = isCurrent ? 'This week' : _weekRangeLabel(mon);
       final summary =
           '$count session${count != 1 ? 's' : ''} · ${_formatDuration(totalMs)}';
-      final weekGoal = _goals[key];
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -569,39 +477,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
           // Week content
           if (isOpen) ...[
             const SizedBox(height: 8),
-            // Past-week goal row
-            if (!isCurrent && weekGoal != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceNest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Text('Time goal',
-                        style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            letterSpacing: 0.8,
-                            color: AppTheme.onSurfaceMuted)),
-                    const SizedBox(width: 8),
-                    Text(_formatGoalTime(weekGoal['value'] as int),
-                        style: GoogleFonts.manrope(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.onSurface)),
-                    const Spacer(),
-                    Text(
-                        '${_formatDuration(totalMs)} achieved',
-                        style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.primary)),
-                  ],
-                ),
-              ),
             // Sessions
             ...ws.map((s) => _SessionCard(
                   session: s,
@@ -616,6 +491,7 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
                   formatWeight: _formatWeight,
                   estimateWater: _estimateWaterLoss,
                   estimateFat: _estimateFatLoss,
+                  showEstimates: widget.variantSlug == 'intermittent_fasting',
                 )),
           ],
           const SizedBox(height: 8),
@@ -657,7 +533,7 @@ class _GradientButton extends StatelessWidget {
             BoxShadow(
               color: (isStop
                   ? const Color(0xFF8B4A47)
-                  : AppTheme.primary).withOpacity(0.28),
+                  : AppTheme.primary).withValues(alpha: 0.28),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
@@ -678,67 +554,91 @@ class _GradientButton extends StatelessWidget {
   }
 }
 
-// ── Week goal card ────────────────────────────────────────────────────────
+// ── This session card (non-IF timers) ─────────────────────────────────────
 
-class _WeekGoalCard extends StatelessWidget {
-  final Map<String, dynamic>? goal;
-  final int totalMs;
+class _ThisSessionCard extends StatelessWidget {
+  final int elapsedMs;
+  final bool isActive;
+  final int? sessionGoalMs;
   final String Function(int) formatGoalTime;
-  final VoidCallback onEdit;
+  final VoidCallback onSetGoal;
 
-  const _WeekGoalCard({
-    required this.goal,
-    required this.totalMs,
+  const _ThisSessionCard({
+    required this.elapsedMs,
+    required this.isActive,
+    required this.sessionGoalMs,
     required this.formatGoalTime,
-    required this.onEdit,
+    required this.onSetGoal,
   });
 
   @override
   Widget build(BuildContext context) {
-    final goalValue = goal?['value'] as int?;
-    final leftMs =
-        goalValue != null ? max(0, goalValue - totalMs) : null;
-    final reached = leftMs == 0;
+    if (!isActive) return const SizedBox.shrink();
+
+    final progress = sessionGoalMs != null
+        ? (elapsedMs / sessionGoalMs!).clamp(0.0, 1.0)
+        : 0.0;
+    final reached = sessionGoalMs != null && elapsedMs >= sessionGoalMs!;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surfaceNest,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Week goal',
-              style: GoogleFonts.plusJakartaSans(
+          Row(
+            children: [
+              Text(
+                'THIS SESSION',
+                style: GoogleFonts.manrope(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8,
-                  color: AppTheme.onSurfaceMuted)),
-          const SizedBox(width: 10),
-          if (goalValue != null) ...[
-            Text(formatGoalTime(goalValue),
-                style: GoogleFonts.manrope(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.onSurface)),
-            const SizedBox(width: 8),
-            Text(
-              reached ? '✓ Goal reached' : '${formatGoalTime(leftMs!)} left',
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: reached ? AppTheme.primary : AppTheme.onSurfaceMuted),
-            ),
-          ] else
-            Text('Set a goal…',
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13, color: AppTheme.onSurfaceMuted)),
-          const Spacer(),
-          GestureDetector(
-            onTap: onEdit,
-            child: const Icon(Icons.edit_outlined,
-                size: 18, color: AppTheme.onSurfaceMuted),
+                  letterSpacing: 1.5,
+                  color: AppTheme.onSurfaceMuted,
+                ),
+              ),
+              const Spacer(),
+              if (sessionGoalMs != null)
+                Text(
+                  reached
+                      ? '✓ ${formatGoalTime(sessionGoalMs!)} goal reached'
+                      : formatGoalTime(sessionGoalMs!),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: reached ? AppTheme.primary : AppTheme.onSurfaceMuted,
+                  ),
+                )
+              else
+                Text(
+                  'Set a goal…',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12, color: AppTheme.onSurfaceMuted),
+                ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onSetGoal,
+                child: const Icon(Icons.edit_outlined,
+                    size: 14, color: AppTheme.onSurfaceMuted),
+              ),
+            ],
           ),
+          if (sessionGoalMs != null) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: AppTheme.surfaceCard,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                    progress >= 1.0 ? AppTheme.primary : AppTheme.secondary),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -756,6 +656,7 @@ class _SessionCard extends StatelessWidget {
   final String Function(double) formatWeight;
   final double Function(int) estimateWater;
   final double Function(int) estimateFat;
+  final bool showEstimates;
 
   const _SessionCard({
     required this.session,
@@ -766,6 +667,7 @@ class _SessionCard extends StatelessWidget {
     required this.formatWeight,
     required this.estimateWater,
     required this.estimateFat,
+    this.showEstimates = false,
   });
 
   @override
@@ -819,20 +721,22 @@ class _SessionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _EstimateChip(
-                  label: 'Water weight',
-                  value: formatWeight(water),
-                  valueColor: const Color(0xFF4A8FA8)),
-              const SizedBox(width: 10),
-              _EstimateChip(
-                  label: 'Fat loss',
-                  value: formatWeight(fat),
-                  valueColor: AppTheme.secondary),
-            ],
-          ),
+          if (showEstimates) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _EstimateChip(
+                    label: 'Water weight',
+                    value: formatWeight(water),
+                    valueColor: const Color(0xFF4A8FA8)),
+                const SizedBox(width: 10),
+                _EstimateChip(
+                    label: 'Fat loss',
+                    value: formatWeight(fat),
+                    valueColor: AppTheme.secondary),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -976,10 +880,15 @@ class _GoalInput extends StatelessWidget {
 class _IFStatsPanel extends StatelessWidget {
   final int elapsedMs;
   final bool isActive;
+  final int? sessionGoalMs;
+  final VoidCallback onSetGoal;
 
-  static const _targetMs = 16 * 3600 * 1000;
-
-  const _IFStatsPanel({required this.elapsedMs, required this.isActive});
+  const _IFStatsPanel({
+    required this.elapsedMs,
+    required this.isActive,
+    required this.sessionGoalMs,
+    required this.onSetGoal,
+  });
 
   double _estimateWater(int ms) =>
       1200 * (1 - exp(-(ms / 3600000) / 12));
@@ -991,12 +900,13 @@ class _IFStatsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!isActive) return const SizedBox.shrink();
 
-    final progress = (elapsedMs / _targetMs).clamp(0.0, 1.0);
+    final effectiveTargetMs = sessionGoalMs ?? (16 * 3600 * 1000);
+    final progress = (elapsedMs / effectiveTargetMs).clamp(0.0, 1.0);
     final kcal = (elapsedMs / 3600000 * 70).round();
     final water = _estimateWater(elapsedMs);
     final h = elapsedMs ~/ 3600000;
     final m = (elapsedMs % 3600000) ~/ 60000;
-    final targetH = _targetMs ~/ 3600000;
+    final targetH = effectiveTargetMs ~/ 3600000;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1023,6 +933,12 @@ class _IFStatsPanel extends StatelessWidget {
                 '${h}h ${m.toString().padLeft(2, '0')}m / ${targetH}h',
                 style: GoogleFonts.plusJakartaSans(
                     fontSize: 12, color: AppTheme.onSurfaceMuted),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onSetGoal,
+                child: const Icon(Icons.edit_outlined,
+                    size: 14, color: AppTheme.onSurfaceMuted),
               ),
             ],
           ),
@@ -1057,6 +973,68 @@ class _IFStatsPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+// ── Big flip clock (timer screen) ────────────────────────────────────────────
+
+class _BigFlipClock extends StatelessWidget {
+  final int elapsedMs;
+  const _BigFlipClock({required this.elapsedMs});
+
+  static const _charcoal = Color(0xFF2C2C2C);
+  static const _digitStyle = TextStyle(
+    fontFamily: 'monospace',
+    fontSize: 46,
+    fontWeight: FontWeight.w700,
+    color: Colors.white,
+    letterSpacing: 1,
+  );
+
+  Widget _segment(int value) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: _charcoal,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: AnimatedFlipCounter(
+          value: value,
+          wholeDigits: 2,
+          textStyle: _digitStyle,
+        ),
+      );
+
+  Widget _colon() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 8, height: 8, decoration: const BoxDecoration(color: _charcoal, shape: BoxShape.circle)),
+            const SizedBox(height: 8),
+            Container(width: 8, height: 8, decoration: const BoxDecoration(color: _charcoal, shape: BoxShape.circle)),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final totalSec = (elapsedMs / 1000).floor().clamp(0, double.maxFinite.toInt());
+    final h = totalSec ~/ 3600;
+    final m = (totalSec % 3600) ~/ 60;
+    final s = totalSec % 60;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _segment(h),
+        _colon(),
+        _segment(m),
+        _colon(),
+        _segment(s),
+      ],
     );
   }
 }
