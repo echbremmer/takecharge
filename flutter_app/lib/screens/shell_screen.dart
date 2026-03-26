@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -16,65 +17,28 @@ class ShellScreen extends ConsumerStatefulWidget {
   ConsumerState<ShellScreen> createState() => _ShellScreenState();
 }
 
-class _ShellScreenState extends ConsumerState<ShellScreen>
-    with SingleTickerProviderStateMixin {
-  bool _menuOpen = false;
-  late final AnimationController _menuCtrl;
-  late final Animation<Offset> _menuSlide;
-
-  @override
-  void initState() {
-    super.initState();
-    _menuCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    );
-    _menuSlide = Tween<Offset>(
-      begin: const Offset(0, -1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _menuCtrl, curve: Curves.easeOut));
-  }
-
-  @override
-  void dispose() {
-    _menuCtrl.dispose();
-    super.dispose();
-  }
-
-  void _toggleMenu() {
-    setState(() => _menuOpen = !_menuOpen);
-    _menuOpen ? _menuCtrl.forward() : _menuCtrl.reverse();
-  }
-
-  void _closeMenu() {
-    setState(() => _menuOpen = false);
-    _menuCtrl.reverse();
-  }
-
+class _ShellScreenState extends ConsumerState<ShellScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: const Text('TAKECHARGE'),
-        leading: IconButton(
-          tooltip: 'Menu',
-          icon: AnimatedIcon(
-            icon: AnimatedIcons.menu_close,
-            progress: _menuCtrl,
-            color: AppTheme.onSurfaceVar,
-          ),
-          onPressed: _toggleMenu,
+        automaticallyImplyLeading: false,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SvgPicture.asset('assets/logo.svg', height: 32),
+            const SizedBox(width: 8),
+            SvgPicture.asset('assets/logo-text.svg', height: 20),
+          ],
         ),
+        titleSpacing: 16,
         actions: [
           IconButton(
             tooltip: 'Profile',
             icon: const Icon(Icons.person_outline,
                 color: Color(0xFF2C2C2C)),
-            onPressed: () {
-              _closeMenu();
-              context.go('/profile');
-            },
+            onPressed: () => context.go('/profile'),
           ),
         ],
         bottom: PreferredSize(
@@ -82,42 +46,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen>
           child: Container(height: 1, color: const Color(0x26C5C8BE)),
         ),
       ),
-      body: Stack(
-        children: [
-          // Page content
-          widget.child,
-
-          // Scrim — closes menu on tap outside
-          AnimatedBuilder(
-            animation: _menuCtrl,
-            builder: (context, _) => _menuCtrl.value > 0
-                ? GestureDetector(
-                    onTap: _closeMenu,
-                    child: Container(
-                      color: Colors.black.withOpacity(_menuCtrl.value * 0.18),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-
-          // Slide-down menu panel
-          SlideTransition(
-            position: _menuSlide,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: _HamburgerMenu(
-                location: widget.location,
-                onSelect: _closeMenu,
-              ),
-            ),
-          ),
-        ],
-      ),
+      body: widget.child,
       bottomNavigationBar: _BottomNav(
-        onTap: () {
-          _closeMenu();
-          context.go('/');
-        },
+        onTap: () => context.go('/'),
       ),
     );
   }
