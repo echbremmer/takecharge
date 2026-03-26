@@ -82,21 +82,19 @@ class _ArrowPainter extends CustomPainter {
     final h = size.height;
     final mid = h / 2;
 
-    // Left rectangle (continuation of segment)
+    // Background = right segment's color so the corners blend in seamlessly.
     canvas.drawRect(
       Rect.fromLTWH(0, 0, w, h),
-      Paint()..color = leftColor,
+      Paint()..color = rightColor,
     );
 
-    // Right triangle — covers right half with next segment's color,
-    // leaving a chevron-shaped cut in the left color.
-    final rightPaint = Paint()..color = rightColor;
+    // Arrow = left segment's color, pointing right into the next segment.
     final path = Path()
       ..moveTo(0, 0)
       ..lineTo(w, mid)
       ..lineTo(0, h)
       ..close();
-    canvas.drawPath(path, rightPaint);
+    canvas.drawPath(path, Paint()..color = leftColor);
   }
 
   @override
