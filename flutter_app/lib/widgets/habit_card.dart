@@ -53,7 +53,7 @@ class HabitCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      isIF ? 'IF' : slug.toUpperCase(),
+                      isIF ? 'FASTING' : slug.toUpperCase(),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
