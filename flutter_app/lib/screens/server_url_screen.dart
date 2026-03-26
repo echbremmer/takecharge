@@ -72,11 +72,10 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
               children: [
                 const SizedBox(height: 48),
 
-                // Logo mark
+                // Logo mark — 70% of screen width
                 SvgPicture.asset(
                   'assets/logo.svg',
-                  width: 72,
-                  height: 72,
+                  width: MediaQuery.of(context).size.width * 0.7,
                 ),
 
                 const SizedBox(height: 16),
