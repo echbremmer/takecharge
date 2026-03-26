@@ -28,11 +28,8 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
   bool _loading = true;
   Timer? _ticker;
 
-  // ── Dial state ─────────────────────────────────────────────────────────────
-  final _dialKey = GlobalKey();
-  double _dialAngle = 0; // degrees (for visual rotation)
-  double _dialAccum = 0; // accumulated degrees for threshold detection
-  double? _dialLastAngle;
+  // ── Scrub state ────────────────────────────────────────────────────────────
+  double _scrubAccum = 0; // accumulated horizontal drag pixels
 
   // ── History UI state ───────────────────────────────────────────────────────
   String? _openWeekKey;
@@ -107,8 +104,7 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
       _ticker?.cancel();
       setState(() {
         _activeStartMs = null;
-        _dialAngle = 0;
-        _dialAccum = 0;
+        _scrubAccum = 0;
       });
     } else {
       // Start
@@ -120,43 +116,27 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
     await _load();
   }
 
-  // ── Dial ──────────────────────────────────────────────────────────────────
-  double _getAngle(Offset globalPos) {
-    final box = _dialKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return 0;
-    final center =
-        box.localToGlobal(Offset(box.size.width / 2, box.size.height / 2));
-    return atan2(globalPos.dy - center.dy, globalPos.dx - center.dx) *
-        180 /
-        pi;
-  }
-
-  void _onDialPanStart(DragStartDetails d) {
-    _dialLastAngle = _getAngle(d.globalPosition);
-    _dialAccum = 0;
-  }
-
-  void _onDialPanUpdate(DragUpdateDetails d) {
-    if (_activeStartMs == null || _dialLastAngle == null) return;
-    var delta = _getAngle(d.globalPosition) - _dialLastAngle!;
-    if (delta > 180) delta -= 360;
-    if (delta < -180) delta += 360;
-    _dialLastAngle = _getAngle(d.globalPosition);
-    _dialAngle += delta;
-    _dialAccum += delta;
-    const threshold = 30.0;
+  // ── Scrub ─────────────────────────────────────────────────────────────────
+  // Every 24px of horizontal drag = 5 minutes.
+  // Drag left → start moves earlier (fast started sooner).
+  // Drag right → start moves later.
+  void _onScrubUpdate(DragUpdateDetails d) {
+    if (_activeStartMs == null) return;
+    _scrubAccum += d.delta.dx;
+    const pxPerStep = 24.0;
     const fiveMin = 5 * 60 * 1000;
 
-    while (_dialAccum >= threshold) {
-      _dialAccum -= threshold;
+    while (_scrubAccum <= -pxPerStep) {
+      _scrubAccum += pxPerStep;
       _adjustStart(-fiveMin);
     }
-    while (_dialAccum <= -threshold) {
-      _dialAccum += threshold;
+    while (_scrubAccum >= pxPerStep) {
+      _scrubAccum -= pxPerStep;
       _adjustStart(fiveMin);
     }
-    setState(() {});
   }
+
+  void _onScrubEnd(DragEndDetails d) => setState(() => _scrubAccum = 0);
 
   void _adjustStart(int deltaMs) {
     if (_activeStartMs == null) return;
@@ -370,7 +350,7 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Dial
+              // Scrub to adjust start time
               Column(
                 children: [
                   Text(
@@ -380,52 +360,35 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
                       color: AppTheme.onSurfaceMuted,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   GestureDetector(
-                    onPanStart: _onDialPanStart,
-                    onPanUpdate: _onDialPanUpdate,
-                    child: Transform.rotate(
-                      angle: _dialAngle * pi / 180,
-                      child: Container(
-                        key: _dialKey,
-                        width: 160,
-                        height: 160,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppTheme.surfaceNest,
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x1E55624D),
-                              blurRadius: 40,
-                              offset: Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: Container(
-                            margin: const EdgeInsets.only(top: 12),
-                            width: 6,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(2),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [AppTheme.primary, AppTheme.primaryCont],
-                              ),
+                    onHorizontalDragUpdate: _onScrubUpdate,
+                    onHorizontalDragEnd: _onScrubEnd,
+                    child: Container(
+                      width: double.infinity,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceNest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.chevron_left,
+                              size: 18, color: AppTheme.onSurfaceMuted),
+                          const SizedBox(width: 6),
+                          Text(
+                            '← drag to adjust  (+5 min per step) →',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: AppTheme.onSurfaceMuted,
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 6),
+                          Icon(Icons.chevron_right,
+                              size: 18, color: AppTheme.onSurfaceMuted),
+                        ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Spin to move start back by 5 min',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: AppTheme.onSurfaceMuted,
                     ),
                   ),
                 ],
