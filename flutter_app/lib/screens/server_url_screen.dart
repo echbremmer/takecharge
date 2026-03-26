@@ -19,6 +19,15 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
   bool _loading = false;
 
   @override
+  void initState() {
+    super.initState();
+    final lastUrl = ref.read(serverUrlProvider).url;
+    if (lastUrl != null && lastUrl.isNotEmpty) {
+      _controller.text = lastUrl;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();

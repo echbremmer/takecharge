@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/auth.dart';
+import 'server_url_provider.dart';
 
 enum AuthStatus { loading, authenticated, unauthenticated }
 
@@ -19,7 +20,9 @@ class AuthState {
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(const AuthState(status: AuthStatus.loading));
+  final Ref _ref;
+
+  AuthNotifier(this._ref) : super(const AuthState(status: AuthStatus.loading));
 
   Future<void> checkAuth() async {
     try {
@@ -60,6 +63,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await authApi.logout();
+    await _ref.read(serverUrlProvider.notifier).clear();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
@@ -74,5 +78,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(),
+  (ref) => AuthNotifier(ref),
 );

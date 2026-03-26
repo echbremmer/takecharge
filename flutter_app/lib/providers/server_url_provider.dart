@@ -63,10 +63,11 @@ class ServerUrlNotifier extends StateNotifier<ServerUrlState> {
 
   void clearError() => state = state.copyWith(clearError: true);
 
-  /// Wipes the saved URL and returns to the setup screen.
+  /// Wipes the saved URL and returns to the setup screen,
+  /// keeping the last URL in state so the field can be pre-filled.
   Future<void> clear() async {
     await ApiClient.instance.clearServerUrl();
-    state = const ServerUrlState(status: ServerUrlStatus.unset);
+    state = ServerUrlState(status: ServerUrlStatus.unset, url: state.url);
   }
 }
 
