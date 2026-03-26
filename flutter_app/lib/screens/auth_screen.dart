@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../providers/auth_provider.dart';
+import '../providers/server_url_provider.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -226,6 +227,24 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Back to server URL
+                      GestureDetector(
+                        onTap: () {
+                          ref.read(serverUrlProvider.notifier).clearError();
+                          ref.read(serverUrlProvider.notifier).clear();
+                        },
+                        child: Text(
+                          '← Wrong server? Change URL',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: AppTheme.onSurfaceMuted,
                           ),
                         ),
                       ),
