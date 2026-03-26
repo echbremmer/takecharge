@@ -491,6 +491,7 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
                   formatWeight: _formatWeight,
                   estimateWater: _estimateWaterLoss,
                   estimateFat: _estimateFatLoss,
+                  showEstimates: widget.variantSlug == 'intermittent_fasting',
                 )),
           ],
           const SizedBox(height: 8),
@@ -655,6 +656,7 @@ class _SessionCard extends StatelessWidget {
   final String Function(double) formatWeight;
   final double Function(int) estimateWater;
   final double Function(int) estimateFat;
+  final bool showEstimates;
 
   const _SessionCard({
     required this.session,
@@ -665,6 +667,7 @@ class _SessionCard extends StatelessWidget {
     required this.formatWeight,
     required this.estimateWater,
     required this.estimateFat,
+    this.showEstimates = false,
   });
 
   @override
@@ -718,20 +721,22 @@ class _SessionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _EstimateChip(
-                  label: 'Water weight',
-                  value: formatWeight(water),
-                  valueColor: const Color(0xFF4A8FA8)),
-              const SizedBox(width: 10),
-              _EstimateChip(
-                  label: 'Fat loss',
-                  value: formatWeight(fat),
-                  valueColor: AppTheme.secondary),
-            ],
-          ),
+          if (showEstimates) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _EstimateChip(
+                    label: 'Water weight',
+                    value: formatWeight(water),
+                    valueColor: const Color(0xFF4A8FA8)),
+                const SizedBox(width: 10),
+                _EstimateChip(
+                    label: 'Fat loss',
+                    value: formatWeight(fat),
+                    valueColor: AppTheme.secondary),
+              ],
+            ),
+          ],
         ],
       ),
     );
