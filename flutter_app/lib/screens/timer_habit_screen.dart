@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:animated_flip_counter/animated_flip_counter.dart';
+
 import '../api/habits.dart';
 import '../main.dart';
 import '../widgets/if_phase_badges.dart';
@@ -28,8 +30,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
   bool _loading = true;
   Timer? _ticker;
 
-  // ── Scrub state ────────────────────────────────────────────────────────────
-  double _scrubAccum = 0; // accumulated horizontal drag pixels
 
   // ── History UI state ───────────────────────────────────────────────────────
   String? _openWeekKey;
@@ -104,7 +104,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
       _ticker?.cancel();
       setState(() {
         _activeStartMs = null;
-        _scrubAccum = 0;
       });
     } else {
       // Start
@@ -116,27 +115,34 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
     await _load();
   }
 
-  // ── Scrub ─────────────────────────────────────────────────────────────────
-  // Every 24px of horizontal drag = 5 minutes.
-  // Drag left → start moves earlier (fast started sooner).
-  // Drag right → start moves later.
-  void _onScrubUpdate(DragUpdateDetails d) {
+  // ── Time picker ───────────────────────────────────────────────────────────
+  Future<void> _pickStartTime() async {
     if (_activeStartMs == null) return;
-    _scrubAccum += d.delta.dx;
-    const pxPerStep = 24.0;
-    const fiveMin = 5 * 60 * 1000;
+    final current = DateTime.fromMillisecondsSinceEpoch(_activeStartMs!);
 
-    while (_scrubAccum <= -pxPerStep) {
-      _scrubAccum += pxPerStep;
-      _adjustStart(-fiveMin);
-    }
-    while (_scrubAccum >= pxPerStep) {
-      _scrubAccum -= pxPerStep;
-      _adjustStart(fiveMin);
-    }
+    // First pick date (in case fast started yesterday)
+    final date = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now().subtract(const Duration(days: 7)),
+      lastDate: DateTime.now(),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (time == null || !mounted) return;
+
+    final newStart = DateTime(
+      date.year, date.month, date.day, time.hour, time.minute,
+    ).millisecondsSinceEpoch;
+
+    if (newStart >= DateTime.now().millisecondsSinceEpoch) return;
+    setState(() => _activeStartMs = newStart);
+    habitsApi.adjustActive(widget.habitId, newStart);
   }
-
-  void _onScrubEnd(DragEndDetails d) => setState(() => _scrubAccum = 0);
 
   void _adjustStart(int deltaMs) {
     if (_activeStartMs == null) return;
@@ -327,71 +333,29 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
             ),
             const SizedBox(height: 4),
 
-            // Timer display
-            Text(
-              _formatDuration(_elapsedMs),
-              style: GoogleFonts.manrope(
-                fontSize: 56,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 56 * 0.02,
-                color: AppTheme.onSurface,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
+            // Timer display — flip clock style
+            _BigFlipClock(elapsedMs: _elapsedMs),
 
-            // Start time
+            // Start time + inline edit button
             if (isActive) ...[
-              Text(
-                'Started at ${_formatTime(_activeStartMs!)}',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  color: AppTheme.onSurfaceMuted,
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _pickStartTime,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Started at ${_formatTime(_activeStartMs!)}',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        color: AppTheme.onSurfaceMuted,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(Icons.edit_outlined,
+                        size: 14, color: AppTheme.onSurfaceMuted),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 20),
-
-              // Scrub to adjust start time
-              Column(
-                children: [
-                  Text(
-                    'Adjust start time',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      color: AppTheme.onSurfaceMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  GestureDetector(
-                    onHorizontalDragUpdate: _onScrubUpdate,
-                    onHorizontalDragEnd: _onScrubEnd,
-                    child: Container(
-                      width: double.infinity,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceNest,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.chevron_left,
-                              size: 18, color: AppTheme.onSurfaceMuted),
-                          const SizedBox(width: 6),
-                          Text(
-                            '← drag to adjust  (+5 min per step) →',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              color: AppTheme.onSurfaceMuted,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(Icons.chevron_right,
-                              size: 18, color: AppTheme.onSurfaceMuted),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ],
 
@@ -1020,6 +984,68 @@ class _IFStatsPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+// ── Big flip clock (timer screen) ────────────────────────────────────────────
+
+class _BigFlipClock extends StatelessWidget {
+  final int elapsedMs;
+  const _BigFlipClock({required this.elapsedMs});
+
+  static const _charcoal = Color(0xFF2C2C2C);
+  static const _digitStyle = TextStyle(
+    fontFamily: 'monospace',
+    fontSize: 46,
+    fontWeight: FontWeight.w700,
+    color: Colors.white,
+    letterSpacing: 1,
+  );
+
+  Widget _segment(int value) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: _charcoal,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: AnimatedFlipCounter(
+          value: value,
+          wholeDigits: 2,
+          textStyle: _digitStyle,
+        ),
+      );
+
+  Widget _colon() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 8, height: 8, decoration: const BoxDecoration(color: _charcoal, shape: BoxShape.circle)),
+            const SizedBox(height: 8),
+            Container(width: 8, height: 8, decoration: const BoxDecoration(color: _charcoal, shape: BoxShape.circle)),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final totalSec = (elapsedMs / 1000).floor().clamp(0, double.maxFinite.toInt());
+    final h = totalSec ~/ 3600;
+    final m = (totalSec % 3600) ~/ 60;
+    final s = totalSec % 60;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _segment(h),
+        _colon(),
+        _segment(m),
+        _colon(),
+        _segment(s),
+      ],
     );
   }
 }
