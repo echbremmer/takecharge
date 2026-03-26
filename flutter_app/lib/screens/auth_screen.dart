@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:flutter_svg/flutter_svg.dart';
+
 import '../main.dart';
 import '../providers/auth_provider.dart';
 import '../providers/server_url_provider.dart';
@@ -67,17 +69,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
-                const SizedBox(height: 48),
+                const SizedBox(height: 24),
 
-                // "TAKECHARGE" — matches the web <h1> style
-                Text(
-                  'TAKECHARGE',
-                  style: GoogleFonts.manrope(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 15 * 0.2, // 0.2em
-                    color: AppTheme.primary,
-                  ),
+                SvgPicture.asset(
+                  'assets/logo.svg',
+                  width: MediaQuery.of(context).size.width * 0.6,
+                ),
+
+                const SizedBox(height: 16),
+
+                SvgPicture.asset(
+                  'assets/logo-text.svg',
+                  width: 270,
                 ),
 
                 const SizedBox(height: 32),
