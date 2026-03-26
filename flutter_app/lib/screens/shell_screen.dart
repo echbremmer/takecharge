@@ -30,7 +30,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           children: [
             SvgPicture.asset('assets/logo.svg', height: 32),
             const SizedBox(width: 8),
-            SvgPicture.asset('assets/logo-text.svg', height: 30),
+            SvgPicture.asset('assets/logo-text.svg', height: 26),
           ],
         ),
         titleSpacing: 16,
