@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -62,14 +63,19 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
               children: [
                 const SizedBox(height: 48),
 
-                Text(
-                  'TAKECHARGE',
-                  style: GoogleFonts.manrope(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 15 * 0.2,
-                    color: AppTheme.primary,
-                  ),
+                // Logo mark
+                SvgPicture.asset(
+                  'assets/logo.svg',
+                  width: 72,
+                  height: 72,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Logo text / wordmark
+                SvgPicture.asset(
+                  'assets/logo-text.svg',
+                  width: 180,
                 ),
 
                 const SizedBox(height: 32),

@@ -34,6 +34,9 @@ dependencies:
   # Flip counter animation
   animated_flip_counter: ^0.3.2
 
+  # SVG rendering
+  flutter_svg: ^2.0.10+1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
