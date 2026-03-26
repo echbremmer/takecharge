@@ -89,33 +89,32 @@ class _IFPhaseBadgesState extends State<IFPhaseBadges>
           ),
         );
 
-        if (isActive) {
-          segment = AnimatedBuilder(
-            animation: _pulse,
-            builder: (_, child) => Opacity(opacity: _pulse.value, child: child),
-            child: segment,
-          );
-        }
-
-        return Row(
+        Widget row = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             segment,
             if (!isLast)
-              AnimatedBuilder(
-                animation: isActive ? _pulse : const AlwaysStoppedAnimation(1.0),
-                builder: (_, __) => CustomPaint(
-                  size: const Size(10, _segmentHeight),
-                  painter: _ArrowPainter(
-                    leftColor: isActive
-                        ? segColor.withOpacity(_pulse.value)
-                        : segColor,
-                    rightColor: nextSegColor,
-                  ),
+              CustomPaint(
+                size: const Size(10, _segmentHeight),
+                painter: _ArrowPainter(
+                  leftColor: segColor,
+                  rightColor: nextSegColor,
                 ),
               ),
           ],
         );
+
+        // Wrap the entire segment+connector in one Opacity so the
+        // connector background pulses together with the segment body.
+        if (isActive) {
+          row = AnimatedBuilder(
+            animation: _pulse,
+            builder: (_, child) => Opacity(opacity: _pulse.value, child: child),
+            child: row,
+          );
+        }
+
+        return row;
       }),
     );
   }
