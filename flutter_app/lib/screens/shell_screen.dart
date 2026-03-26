@@ -24,12 +24,13 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        centerTitle: false,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SvgPicture.asset('assets/logo.svg', height: 32),
             const SizedBox(width: 8),
-            SvgPicture.asset('assets/logo-text.svg', height: 20),
+            SvgPicture.asset('assets/logo-text.svg', height: 30),
           ],
         ),
         titleSpacing: 16,
