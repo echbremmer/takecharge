@@ -26,7 +26,7 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
   // ── Timer state ────────────────────────────────────────────────────────────
   int? _activeStartMs;
   List<dynamic> _sessions = [];
-  final Map<String, Map<String, dynamic>> _goals = {}; // weekKey → goal
+  int? _sessionGoalMs;
   bool _loading = true;
   Timer? _ticker;
 
@@ -60,11 +60,11 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
       final goals = results[2] as List<dynamic>;
 
       _sessions = sessions;
-      _goals.clear();
-      for (final g in goals) {
-        final dt = DateTime.fromMillisecondsSinceEpoch(g['week_start_ms'] as int);
-        _goals[_weekKey(_weekMonday(dt))] = g as Map<String, dynamic>;
-      }
+      // Find session goal (stored with week_start_ms == 0 as sentinel)
+      final sessionGoal = goals.cast<Map<String, dynamic>>()
+          .where((g) => (g['week_start_ms'] as int) == 0)
+          .firstOrNull;
+      _sessionGoalMs = sessionGoal != null ? sessionGoal['value'] as int : null;
 
       if (active != null) {
         _activeStartMs = active['start'] as int;
@@ -144,38 +144,26 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
     habitsApi.adjustActive(widget.habitId, newStart);
   }
 
-  void _adjustStart(int deltaMs) {
-    if (_activeStartMs == null) return;
-    final newStart = _activeStartMs! + deltaMs;
-    if (newStart >= DateTime.now().millisecondsSinceEpoch) return;
-    setState(() => _activeStartMs = newStart);
-    habitsApi.adjustActive(widget.habitId, newStart);
-  }
-
-  // ── Week goal ─────────────────────────────────────────────────────────────
-  void _showGoalDialog() {
-    final goal = _goals[_weekKey(_weekMonday(DateTime.now()))];
-    final parts = goal != null
-        ? _msToGoalParts(goal['value'] as int)
+  // ── Session goal ──────────────────────────────────────────────────────────
+  void _showSessionGoalDialog() {
+    final parts = _sessionGoalMs != null
+        ? _msToGoalParts(_sessionGoalMs!)
         : {'d': 0, 'h': 16, 'm': 0};
 
-    int d = parts['d']!, h = parts['h']!, m = parts['m']!;
+    int h = parts['h']!, m = parts['m']!;
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           backgroundColor: AppTheme.surfaceCard,
-          title: Text('Set week goal',
+          title: Text('Set session goal',
               style: GoogleFonts.manrope(
                   fontWeight: FontWeight.w700, color: AppTheme.primary)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(children: [
-                _GoalInput(label: 'Days', value: d, min: 0, max: 6,
-                    onChanged: (v) => setS(() => d = v)),
-                const SizedBox(width: 12),
-                _GoalInput(label: 'Hours', value: h, min: 0, max: 23,
+                _GoalInput(label: 'Hours', value: h, min: 0, max: 72,
                     onChanged: (v) => setS(() => h = v)),
                 const SizedBox(width: 12),
                 _GoalInput(label: 'Min', value: m, min: 0, max: 55, step: 5,
@@ -191,12 +179,11 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(ctx);
-                final ms = (d * 86400 + h * 3600 + m * 60) * 1000;
+                final ms = (h * 3600 + m * 60) * 1000;
                 if (ms <= 0) return;
-                final weekStartMs = _weekMonday(DateTime.now()).millisecondsSinceEpoch;
-                final result = await habitsApi.setGoal(
-                    widget.habitId, weekStartMs, ms);
-                setState(() => _goals[_weekKey(_weekMonday(DateTime.now()))] = result);
+                // Use week_start_ms = 0 as sentinel for session goal
+                await habitsApi.setGoal(widget.habitId, 0, ms);
+                setState(() => _sessionGoalMs = ms);
               },
               child: const Text('Save'),
             ),
@@ -275,17 +262,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
   String _formatWeight(double g) =>
       g >= 1000 ? '${(g / 1000).toStringAsFixed(2)} kg' : '${g.round()} g';
 
-  // ── Current week stats ─────────────────────────────────────────────────────
-  int get _curWeekSessionsMs {
-    final curKey = _weekKey(_weekMonday(DateTime.now()));
-    return _sessions
-        .where((s) =>
-            _weekKey(_weekMonday(
-                DateTime.fromMillisecondsSinceEpoch(s['start'] as int))) ==
-            curKey)
-        .fold(0, (sum, s) => sum + (s['duration'] as int));
-  }
-
   int get _elapsedMs => _activeStartMs != null
       ? DateTime.now().millisecondsSinceEpoch - _activeStartMs!
       : 0;
@@ -298,9 +274,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
     }
 
     final isActive = _activeStartMs != null;
-    final curKey = _weekKey(_weekMonday(DateTime.now()));
-    final weekGoal = _goals[curKey];
-    final totalMs = _curWeekSessionsMs + _elapsedMs;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 80),
@@ -374,17 +347,26 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
 
         // ── IF stats panel (only for IF variant) ─────────────────────────────
         if (widget.variantSlug == 'intermittent_fasting') ...[
-          _IFStatsPanel(elapsedMs: _elapsedMs, isActive: isActive),
+          _IFStatsPanel(
+            elapsedMs: _elapsedMs,
+            isActive: isActive,
+            sessionGoalMs: _sessionGoalMs,
+            onSetGoal: _showSessionGoalDialog,
+          ),
           const SizedBox(height: 16),
         ],
 
-        // ── Week goal card ───────────────────────────────────────────────────
-        _WeekGoalCard(
-          goal: weekGoal,
-          totalMs: totalMs,
-          formatGoalTime: _formatGoalTime,
-          onEdit: _showGoalDialog,
-        ),
+        // ── This session card (non-IF timers only) ───────────────────────────
+        if (widget.variantSlug != 'intermittent_fasting') ...[
+          _ThisSessionCard(
+            elapsedMs: _elapsedMs,
+            isActive: isActive,
+            sessionGoalMs: _sessionGoalMs,
+            formatGoalTime: _formatGoalTime,
+            onSetGoal: _showSessionGoalDialog,
+          ),
+          const SizedBox(height: 16),
+        ],
 
         const SizedBox(height: 32),
 
@@ -448,7 +430,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
       final label = isCurrent ? 'This week' : _weekRangeLabel(mon);
       final summary =
           '$count session${count != 1 ? 's' : ''} · ${_formatDuration(totalMs)}';
-      final weekGoal = _goals[key];
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -496,39 +477,6 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
           // Week content
           if (isOpen) ...[
             const SizedBox(height: 8),
-            // Past-week goal row
-            if (!isCurrent && weekGoal != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceNest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Text('Time goal',
-                        style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            letterSpacing: 0.8,
-                            color: AppTheme.onSurfaceMuted)),
-                    const SizedBox(width: 8),
-                    Text(_formatGoalTime(weekGoal['value'] as int),
-                        style: GoogleFonts.manrope(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.onSurface)),
-                    const Spacer(),
-                    Text(
-                        '${_formatDuration(totalMs)} achieved',
-                        style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.primary)),
-                  ],
-                ),
-              ),
             // Sessions
             ...ws.map((s) => _SessionCard(
                   session: s,
@@ -584,7 +532,7 @@ class _GradientButton extends StatelessWidget {
             BoxShadow(
               color: (isStop
                   ? const Color(0xFF8B4A47)
-                  : AppTheme.primary).withOpacity(0.28),
+                  : AppTheme.primary).withValues(alpha: 0.28),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
@@ -605,67 +553,91 @@ class _GradientButton extends StatelessWidget {
   }
 }
 
-// ── Week goal card ────────────────────────────────────────────────────────
+// ── This session card (non-IF timers) ─────────────────────────────────────
 
-class _WeekGoalCard extends StatelessWidget {
-  final Map<String, dynamic>? goal;
-  final int totalMs;
+class _ThisSessionCard extends StatelessWidget {
+  final int elapsedMs;
+  final bool isActive;
+  final int? sessionGoalMs;
   final String Function(int) formatGoalTime;
-  final VoidCallback onEdit;
+  final VoidCallback onSetGoal;
 
-  const _WeekGoalCard({
-    required this.goal,
-    required this.totalMs,
+  const _ThisSessionCard({
+    required this.elapsedMs,
+    required this.isActive,
+    required this.sessionGoalMs,
     required this.formatGoalTime,
-    required this.onEdit,
+    required this.onSetGoal,
   });
 
   @override
   Widget build(BuildContext context) {
-    final goalValue = goal?['value'] as int?;
-    final leftMs =
-        goalValue != null ? max(0, goalValue - totalMs) : null;
-    final reached = leftMs == 0;
+    if (!isActive) return const SizedBox.shrink();
+
+    final progress = sessionGoalMs != null
+        ? (elapsedMs / sessionGoalMs!).clamp(0.0, 1.0)
+        : 0.0;
+    final reached = sessionGoalMs != null && elapsedMs >= sessionGoalMs!;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surfaceNest,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Week goal',
-              style: GoogleFonts.plusJakartaSans(
+          Row(
+            children: [
+              Text(
+                'THIS SESSION',
+                style: GoogleFonts.manrope(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8,
-                  color: AppTheme.onSurfaceMuted)),
-          const SizedBox(width: 10),
-          if (goalValue != null) ...[
-            Text(formatGoalTime(goalValue),
-                style: GoogleFonts.manrope(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.onSurface)),
-            const SizedBox(width: 8),
-            Text(
-              reached ? '✓ Goal reached' : '${formatGoalTime(leftMs!)} left',
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: reached ? AppTheme.primary : AppTheme.onSurfaceMuted),
-            ),
-          ] else
-            Text('Set a goal…',
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13, color: AppTheme.onSurfaceMuted)),
-          const Spacer(),
-          GestureDetector(
-            onTap: onEdit,
-            child: const Icon(Icons.edit_outlined,
-                size: 18, color: AppTheme.onSurfaceMuted),
+                  letterSpacing: 1.5,
+                  color: AppTheme.onSurfaceMuted,
+                ),
+              ),
+              const Spacer(),
+              if (sessionGoalMs != null)
+                Text(
+                  reached
+                      ? '✓ ${formatGoalTime(sessionGoalMs!)} goal reached'
+                      : formatGoalTime(sessionGoalMs!),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: reached ? AppTheme.primary : AppTheme.onSurfaceMuted,
+                  ),
+                )
+              else
+                Text(
+                  'Set a goal…',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12, color: AppTheme.onSurfaceMuted),
+                ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onSetGoal,
+                child: const Icon(Icons.edit_outlined,
+                    size: 14, color: AppTheme.onSurfaceMuted),
+              ),
+            ],
           ),
+          if (sessionGoalMs != null) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: AppTheme.surfaceCard,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                    progress >= 1.0 ? AppTheme.primary : AppTheme.secondary),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -903,10 +875,15 @@ class _GoalInput extends StatelessWidget {
 class _IFStatsPanel extends StatelessWidget {
   final int elapsedMs;
   final bool isActive;
+  final int? sessionGoalMs;
+  final VoidCallback onSetGoal;
 
-  static const _targetMs = 16 * 3600 * 1000;
-
-  const _IFStatsPanel({required this.elapsedMs, required this.isActive});
+  const _IFStatsPanel({
+    required this.elapsedMs,
+    required this.isActive,
+    required this.sessionGoalMs,
+    required this.onSetGoal,
+  });
 
   double _estimateWater(int ms) =>
       1200 * (1 - exp(-(ms / 3600000) / 12));
@@ -918,12 +895,13 @@ class _IFStatsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!isActive) return const SizedBox.shrink();
 
-    final progress = (elapsedMs / _targetMs).clamp(0.0, 1.0);
+    final effectiveTargetMs = sessionGoalMs ?? (16 * 3600 * 1000);
+    final progress = (elapsedMs / effectiveTargetMs).clamp(0.0, 1.0);
     final kcal = (elapsedMs / 3600000 * 70).round();
     final water = _estimateWater(elapsedMs);
     final h = elapsedMs ~/ 3600000;
     final m = (elapsedMs % 3600000) ~/ 60000;
-    final targetH = _targetMs ~/ 3600000;
+    final targetH = effectiveTargetMs ~/ 3600000;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -950,6 +928,12 @@ class _IFStatsPanel extends StatelessWidget {
                 '${h}h ${m.toString().padLeft(2, '0')}m / ${targetH}h',
                 style: GoogleFonts.plusJakartaSans(
                     fontSize: 12, color: AppTheme.onSurfaceMuted),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onSetGoal,
+                child: const Icon(Icons.edit_outlined,
+                    size: 14, color: AppTheme.onSurfaceMuted),
               ),
             ],
           ),
