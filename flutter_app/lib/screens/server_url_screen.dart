@@ -70,12 +70,12 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
-                const SizedBox(height: 48),
+                const SizedBox(height: 24),
 
-                // Logo mark — 70% of screen width
+                // Logo mark — 60% of screen width
                 SvgPicture.asset(
                   'assets/logo.svg',
-                  width: MediaQuery.of(context).size.width * 0.7,
+                  width: MediaQuery.of(context).size.width * 0.6,
                 ),
 
                 const SizedBox(height: 16),
@@ -83,7 +83,7 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
                 // Logo text / wordmark
                 SvgPicture.asset(
                   'assets/logo-text.svg',
-                  width: 180,
+                  width: 270,
                 ),
 
                 const SizedBox(height: 32),
