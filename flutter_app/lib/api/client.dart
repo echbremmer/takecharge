@@ -9,16 +9,36 @@ const String _defaultBase = String.fromEnvironment(
   defaultValue: '',
 );
 
+const _storage = FlutterSecureStorage();
+const _serverUrlKey = 'server_url';
+
 class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
 
-  late final Dio dio;
-  late final String baseUrl;
+  late Dio dio;
+  late String baseUrl;
 
   Future<void> init() async {
-    baseUrl = _defaultBase.isNotEmpty ? _defaultBase : 'http://localhost:8080';
+    final saved = await _storage.read(key: _serverUrlKey);
+    baseUrl = saved ?? (_defaultBase.isNotEmpty ? _defaultBase : '');
+    _buildDio();
+  }
 
+  /// Saves [url] persistently and rebuilds the Dio instance.
+  Future<void> reinit(String url) async {
+    await _storage.write(key: _serverUrlKey, value: url);
+    baseUrl = url;
+    _buildDio();
+  }
+
+  /// Returns the persisted server URL, or null if not yet set.
+  Future<String?> loadServerUrl() => _storage.read(key: _serverUrlKey);
+
+  /// Clears the persisted server URL.
+  Future<void> clearServerUrl() => _storage.delete(key: _serverUrlKey);
+
+  void _buildDio() {
     final options = BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),

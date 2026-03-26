@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'api/client.dart';
 import 'providers/auth_provider.dart';
+import 'providers/server_url_provider.dart';
 import 'router.dart';
 
 void main() async {
@@ -30,7 +31,9 @@ class _AppStartupState extends ConsumerState<AppStartup> {
   @override
   void initState() {
     super.initState();
-    ref.read(authProvider.notifier).checkAuth();
+    ref.read(serverUrlProvider.notifier).load().then((_) {
+      ref.read(authProvider.notifier).checkAuth();
+    });
   }
 
   @override

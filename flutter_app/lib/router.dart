@@ -3,40 +3,56 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'providers/auth_provider.dart';
+import 'providers/server_url_provider.dart';
 import 'screens/auth_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/habit_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/add_habit_screen.dart';
+import 'screens/server_url_screen.dart';
 import 'screens/shell_screen.dart';
 
-class _AuthListenable extends ChangeNotifier {
+class _RouterListenable extends ChangeNotifier {
   void notify() => notifyListeners();
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final notifier = _AuthListenable();
+  final notifier = _RouterListenable();
   ref.listen(authProvider, (_, __) => notifier.notify());
+  ref.listen(serverUrlProvider, (_, __) => notifier.notify());
   ref.onDispose(notifier.dispose);
 
   return GoRouter(
     initialLocation: '/',
     refreshListenable: notifier,
     redirect: (context, state) {
+      final serverUrl = ref.read(serverUrlProvider);
       final auth = ref.read(authProvider);
       final path = state.uri.path;
 
-      if (auth.status == AuthStatus.loading) {
+      // 1. Still loading storage — show spinner
+      if (serverUrl.status == ServerUrlStatus.loading ||
+          auth.status == AuthStatus.loading) {
         return path == '/loading' ? null : '/loading';
       }
-      if (auth.status == AuthStatus.unauthenticated && path != '/auth') {
-        return '/auth';
+
+      // 2. No server URL saved yet — must configure first
+      if (serverUrl.status == ServerUrlStatus.unset) {
+        return path == '/server-url' ? null : '/server-url';
       }
+
+      // 3. Server URL set but not authenticated
+      if (auth.status == AuthStatus.unauthenticated) {
+        return path == '/auth' ? null : '/auth';
+      }
+
+      // 4. Authenticated — bounce away from setup/auth screens
       if (auth.status == AuthStatus.authenticated &&
-          (path == '/auth' || path == '/loading')) {
+          (path == '/auth' || path == '/server-url' || path == '/loading')) {
         return '/';
       }
+
       return null;
     },
     routes: [
@@ -46,6 +62,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const Scaffold(
           body: Center(child: CircularProgressIndicator()),
         ),
+      ),
+
+      // Server URL setup (outside shell — first-launch only)
+      GoRoute(
+        path: '/server-url',
+        builder: (_, __) => const ServerUrlScreen(),
       ),
 
       // Auth (outside shell — no bottom nav)
