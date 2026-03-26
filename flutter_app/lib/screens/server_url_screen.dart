@@ -92,24 +92,6 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Connect to server',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.manrope(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Enter the address of your TakeCharge backend.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
-                          color: AppTheme.onSurfaceMuted,
-                        ),
-                      ),
                       const SizedBox(height: 24),
 
                       // URL field

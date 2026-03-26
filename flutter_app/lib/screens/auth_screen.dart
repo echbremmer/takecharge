@@ -240,7 +240,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           ref.read(serverUrlProvider.notifier).clear();
                         },
                         child: Text(
-                          '← Wrong server? Change URL',
+                          '← Back',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
