@@ -278,72 +278,98 @@ class _TimerHabitScreenState extends ConsumerState<TimerHabitScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 80),
       children: [
-        // Habit name
-        Text(
-          widget.habitName,
-          style: GoogleFonts.manrope(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
-            color: AppTheme.onSurfaceMuted,
+        // ── Timer card ───────────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x0855624D),
+                  blurRadius: 24,
+                  offset: Offset(0, 4)),
+            ],
           ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 24),
-
-        // ── Timer section ────────────────────────────────────────────────────
-        Column(
-          children: [
-            // Status
-            Text(
-              isActive ? 'Active' : 'Not active',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
-                letterSpacing: 0.3,
-                color: isActive ? AppTheme.primary : AppTheme.onSurfaceMuted,
-              ),
-            ),
-            const SizedBox(height: 4),
-
-            // Timer display — flip clock style
-            _BigFlipClock(elapsedMs: _elapsedMs),
-
-            // Start time + inline edit button
-            if (isActive) ...[
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: _pickStartTime,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Started at ${_formatTime(_activeStartMs!)}',
+          child: Column(
+            children: [
+              // Habit name + status badge
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.habitName,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        color: AppTheme.onSurfaceMuted,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.onSurface,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.edit_outlined,
-                        size: 14, color: AppTheme.onSurfaceMuted),
-                  ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? AppTheme.primaryFixed
+                          : const Color(0x1A55624D),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isActive ? 'ACTIVE' : 'NOT ACTIVE',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: isActive
+                            ? AppTheme.primary
+                            : AppTheme.onSurfaceMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Timer display — flip clock style
+              _BigFlipClock(elapsedMs: _elapsedMs),
+
+              // Start time + inline edit button
+              if (isActive) ...[
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _pickStartTime,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Started at ${_formatTime(_activeStartMs!)}',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: AppTheme.onSurfaceMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.edit_outlined,
+                          size: 14, color: AppTheme.onSurfaceMuted),
+                    ],
+                  ),
                 ),
+              ],
+
+              const SizedBox(height: 20),
+
+              // Start / Stop button
+              _GradientButton(
+                label: isActive ? 'Stop' : 'Start',
+                isStop: isActive,
+                onTap: _toggle,
               ),
             ],
-
-            const SizedBox(height: 28),
-
-            // Start / Stop button
-            _GradientButton(
-              label: isActive ? 'Stop' : 'Start',
-              isStop: isActive,
-              onTap: _toggle,
-            ),
-          ],
+          ),
         ),
 
-        const SizedBox(height: 28),
+        const SizedBox(height: 16),
 
         // ── IF stats panel (only for IF variant) ─────────────────────────────
         if (widget.variantSlug == 'intermittent_fasting') ...[
