@@ -700,7 +700,8 @@ class _TargetCard extends StatelessWidget {
               ),
               // Status badge
               if (isDone && !isOverLimit)
-                _badge('DONE', AppTheme.primary, AppTheme.primaryFixed)
+                _badge(mode == 'limit' ? 'WITHIN LIMIT' : 'DONE',
+                    AppTheme.primary, AppTheme.primaryFixed)
               else if (isOverLimit)
                 _badge('OVER LIMIT', const Color(0xFFD32F2F),
                     const Color(0xFFFFEBEE)),
