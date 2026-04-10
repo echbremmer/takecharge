@@ -158,38 +158,105 @@ class _DailyHabitScreenState extends State<DailyHabitScreen> {
     final todayMs = _todayMs;
     final weekStart = _weekMonday(today);
 
+    // Compute today's overall status for badge
+    final allDone = _targets.isNotEmpty && _isAllDone(todayMs);
+    final anyData = _hasAnyData(todayMs);
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
       children: [
-        // ── Today ──────────────────────────────────────────────────────────
-        _SectionLabel('TODAY'),
-        const SizedBox(height: 10),
-        if (_targets.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'No targets configured yet. Add one below.',
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14, color: AppTheme.onSurfaceMuted),
-            ),
-          )
-        else
-          ..._targets.map((t) {
-            final tid = (t['id'] as num).toInt();
-            final value = _getValue(todayMs, tid);
-            final step = (t['step'] as num).toDouble();
-            return _TargetCard(
-              target: t,
-              value: value,
-              progress: _progress(t, value),
-              isDone: _isDone(t, value),
-              isOverLimit: _isOverLimit(t, value),
-              onIncrement: () => _setLog(tid, todayMs, value + step),
-              onDecrement: value > 0
-                  ? () => _setLog(tid, todayMs, (value - step).clamp(0, double.infinity))
-                  : null,
-            );
-          }),
+        // ── Today card ─────────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x0855624D),
+                  blurRadius: 24,
+                  offset: Offset(0, 4)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.habitName,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  if (_targets.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: allDone
+                            ? AppTheme.primaryFixed
+                            : anyData
+                                ? const Color(0xFFFFF3E0)
+                                : const Color(0x1A55624D),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        allDone
+                            ? 'ALL DONE'
+                            : anyData
+                                ? 'IN PROGRESS'
+                                : 'NOT STARTED',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: allDone
+                              ? AppTheme.primary
+                              : anyData
+                                  ? const Color(0xFFE8650A)
+                                  : AppTheme.onSurfaceMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              if (_targets.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    'No targets configured yet. Add one below.',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14, color: AppTheme.onSurfaceMuted),
+                  ),
+                )
+              else ...[
+                const SizedBox(height: 12),
+                ..._targets.map((t) {
+                  final tid = (t['id'] as num).toInt();
+                  final value = _getValue(todayMs, tid);
+                  final step = (t['step'] as num).toDouble();
+                  return _TargetCard(
+                    target: t,
+                    value: value,
+                    progress: _progress(t, value),
+                    isDone: _isDone(t, value),
+                    isOverLimit: _isOverLimit(t, value),
+                    onIncrement: () => _setLog(tid, todayMs, value + step),
+                    onDecrement: value > 0
+                        ? () => _setLog(
+                            tid, todayMs, (value - step).clamp(0, double.infinity))
+                        : null,
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
 
         const SizedBox(height: 28),
 
@@ -616,14 +683,8 @@ class _TargetCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
+        color: AppTheme.surfaceNest,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0855624D),
-              blurRadius: 24,
-              offset: Offset(0, 4))
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -639,7 +700,8 @@ class _TargetCard extends StatelessWidget {
               ),
               // Status badge
               if (isDone && !isOverLimit)
-                _badge('DONE', AppTheme.primary, AppTheme.primaryFixed)
+                _badge(mode == 'limit' ? 'WITHIN LIMIT' : 'DONE',
+                    AppTheme.primary, AppTheme.primaryFixed)
               else if (isOverLimit)
                 _badge('OVER LIMIT', const Color(0xFFD32F2F),
                     const Color(0xFFFFEBEE)),
