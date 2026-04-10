@@ -119,6 +119,41 @@ class _TodoHabitScreenState extends State<TodoHabitScreen> {
     }
   }
 
+  Future<void> _pickDeadline(Map<String, dynamic> todo) async {
+    final id = (todo['id'] as num).toInt();
+    final existing = todo['deadline_ms'] != null
+        ? DateTime.fromMillisecondsSinceEpoch((todo['deadline_ms'] as num).toInt())
+        : null;
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: existing ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: existing != null
+          ? TimeOfDay.fromDateTime(existing)
+          : const TimeOfDay(hour: 23, minute: 59),
+    );
+    if (time == null || !mounted) return;
+
+    final deadlineMs = DateTime(
+            date.year, date.month, date.day, time.hour, time.minute)
+        .millisecondsSinceEpoch;
+    setState(() => todo['deadline_ms'] = deadlineMs);
+    habitsApi.setTodoDeadline(widget.habitId, id, deadlineMs);
+  }
+
+  Future<void> _clearDeadline(Map<String, dynamic> todo) async {
+    final id = (todo['id'] as num).toInt();
+    setState(() => todo['deadline_ms'] = null);
+    habitsApi.setTodoDeadline(widget.habitId, id, null);
+  }
+
   Future<void> _delete(Map<String, dynamic> todo) async {
     final id = (todo['id'] as num).toInt();
     setState(() => _todos.removeWhere((t) => (t['id'] as num).toInt() == id));
@@ -244,6 +279,8 @@ class _TodoHabitScreenState extends State<TodoHabitScreen> {
             todo: t,
             onToggle: () => _toggle(t),
             onDelete: () => _delete(t),
+            onSetDeadline: () => _pickDeadline(t),
+            onClearDeadline: () => _clearDeadline(t),
           )).toList(),
     );
   }
@@ -370,26 +407,46 @@ class _TodoItem extends StatelessWidget {
   final Map<String, dynamic> todo;
   final VoidCallback? onToggle;
   final VoidCallback? onDelete;
+  final VoidCallback? onSetDeadline;
+  final VoidCallback? onClearDeadline;
   final bool readOnly;
 
   const _TodoItem({
     required this.todo,
     this.onToggle,
     this.onDelete,
+    this.onSetDeadline,
+    this.onClearDeadline,
     this.readOnly = false,
   });
+
+  String _fmtDeadline(int ms) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${months[dt.month - 1]} ${dt.day}  $h:$m';
+  }
 
   @override
   Widget build(BuildContext context) {
     final checked = todo['checked'] as bool? ?? false;
     final text = todo['text'] as String? ?? '';
+    final deadlineMs = todo['deadline_ms'] != null
+        ? (todo['deadline_ms'] as num).toInt()
+        : null;
+    final isOverdue = deadlineMs != null &&
+        DateTime.now().millisecondsSinceEpoch > deadlineMs &&
+        !checked;
 
     return GestureDetector(
       onTap: readOnly ? null : onToggle,
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: checked
               ? AppTheme.primaryFixed.withAlpha(120)
@@ -414,8 +471,7 @@ class _TodoItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(5),
               ),
               child: checked
-                  ? const Icon(Icons.check,
-                      size: 13, color: Colors.white)
+                  ? const Icon(Icons.check, size: 13, color: Colors.white)
                   : null,
             ),
             const SizedBox(width: 12),
@@ -428,15 +484,35 @@ class _TodoItem extends StatelessWidget {
                   color: checked
                       ? AppTheme.onSurfaceMuted
                       : AppTheme.onSurface,
-                  decoration:
-                      checked ? TextDecoration.lineThrough : null,
+                  decoration: checked ? TextDecoration.lineThrough : null,
                   decorationColor: AppTheme.onSurfaceMuted,
                 ),
               ),
             ),
-            // Delete button (current week only)
-            if (!readOnly && onDelete != null) ...[
+            // Deadline
+            if (!readOnly) ...[
               const SizedBox(width: 8),
+              if (deadlineMs != null)
+                GestureDetector(
+                  onTap: onClearDeadline,
+                  child: Text(
+                    _fmtDeadline(deadlineMs),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isOverdue
+                          ? const Color(0xFFD32F2F)
+                          : AppTheme.onSurfaceMuted,
+                    ),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: onSetDeadline,
+                  child: const Icon(Icons.schedule_outlined,
+                      size: 16, color: AppTheme.onSurfaceMuted),
+                ),
+              const SizedBox(width: 10),
               GestureDetector(
                 onTap: onDelete,
                 child: const Icon(Icons.close,

@@ -114,6 +114,11 @@ class HabitsApi {
     await _client.put('/api/habits/$habitId/todos/$todoId', data: {'checked': done});
   }
 
+  Future<void> setTodoDeadline(int habitId, int todoId, int? deadlineMs) async {
+    await _client.put('/api/habits/$habitId/todos/$todoId',
+        data: {'deadline_ms': deadlineMs});
+  }
+
   Future<void> deleteTodo(int habitId, int todoId) async {
     await _client.delete('/api/habits/$habitId/todos/$todoId');
   }

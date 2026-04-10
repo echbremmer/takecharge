@@ -73,6 +73,7 @@ type TodoItem struct {
 	Checked     bool   `json:"checked"`
 	WeekStartMs int64  `json:"week_start_ms"`
 	CreatedMs   int64  `json:"created_ms"`
+	DeadlineMs  *int64 `json:"deadline_ms"`
 }
 
 type DailyTarget struct {
@@ -197,6 +198,7 @@ func initDB() {
 	db.Exec("ALTER TABLE users ADD COLUMN profile_image_type TEXT")
 	db.Exec("ALTER TABLE daily_targets ADD COLUMN mode TEXT NOT NULL DEFAULT 'target'")
 	db.Exec("ALTER TABLE habits ADD COLUMN variant_slug TEXT NOT NULL DEFAULT ''")
+	db.Exec("ALTER TABLE todo_items ADD COLUMN deadline_ms INTEGER")
 	db.Exec("UPDATE habits SET variant_slug = 'intermittent_fasting' WHERE name = 'Fasting' AND style_id = 1 AND variant_slug = ''")
 }
 
@@ -972,7 +974,7 @@ func handleHabitTodos(w http.ResponseWriter, r *http.Request, habitID int64) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := db.Query(
-			"SELECT id, habit_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE habit_id = ? ORDER BY created_ms ASC",
+			"SELECT id, habit_id, text, checked, week_start_ms, created_ms, deadline_ms FROM todo_items WHERE habit_id = ? ORDER BY created_ms ASC",
 			habitID,
 		)
 		if err != nil {
@@ -984,7 +986,7 @@ func handleHabitTodos(w http.ResponseWriter, r *http.Request, habitID int64) {
 		for rows.Next() {
 			var t TodoItem
 			var checked int
-			rows.Scan(&t.ID, &t.HabitID, &t.Text, &checked, &t.WeekStartMs, &t.CreatedMs)
+			rows.Scan(&t.ID, &t.HabitID, &t.Text, &checked, &t.WeekStartMs, &t.CreatedMs, &t.DeadlineMs)
 			t.Checked = checked == 1
 			items = append(items, t)
 		}
@@ -999,8 +1001,8 @@ func handleHabitTodos(w http.ResponseWriter, r *http.Request, habitID int64) {
 		t.HabitID = habitID
 		t.CreatedMs = nowMs()
 		res, err := db.Exec(
-			"INSERT INTO todo_items (habit_id, text, checked, week_start_ms, created_ms) VALUES (?, ?, 0, ?, ?)",
-			habitID, t.Text, t.WeekStartMs, t.CreatedMs,
+			"INSERT INTO todo_items (habit_id, text, checked, week_start_ms, created_ms, deadline_ms) VALUES (?, ?, 0, ?, ?, ?)",
+			habitID, t.Text, t.WeekStartMs, t.CreatedMs, t.DeadlineMs,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -1020,7 +1022,8 @@ func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, habitID int64, 
 	switch r.Method {
 	case http.MethodPut:
 		var body struct {
-			Checked bool `json:"checked"`
+			Checked    bool   `json:"checked"`
+			DeadlineMs *int64 `json:"deadline_ms"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid json", 400)
@@ -1031,8 +1034,8 @@ func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, habitID int64, 
 			checked = 1
 		}
 		res, err := db.Exec(
-			"UPDATE todo_items SET checked=? WHERE id=? AND habit_id=?",
-			checked, id, habitID,
+			"UPDATE todo_items SET checked=?, deadline_ms=? WHERE id=? AND habit_id=?",
+			checked, body.DeadlineMs, id, habitID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -1046,8 +1049,8 @@ func handleHabitTodoByID(w http.ResponseWriter, r *http.Request, habitID int64, 
 		var t TodoItem
 		var chk int
 		db.QueryRow(
-			"SELECT id, habit_id, text, checked, week_start_ms, created_ms FROM todo_items WHERE id=?", id,
-		).Scan(&t.ID, &t.HabitID, &t.Text, &chk, &t.WeekStartMs, &t.CreatedMs)
+			"SELECT id, habit_id, text, checked, week_start_ms, created_ms, deadline_ms FROM todo_items WHERE id=?", id,
+		).Scan(&t.ID, &t.HabitID, &t.Text, &chk, &t.WeekStartMs, &t.CreatedMs, &t.DeadlineMs)
 		t.Checked = chk == 1
 		writeJSON(w, 200, t)
 
