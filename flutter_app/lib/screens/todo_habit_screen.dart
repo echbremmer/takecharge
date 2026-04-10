@@ -182,8 +182,35 @@ class _TodoHabitScreenState extends State<TodoHabitScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
       children: [
-        // ── Add item ───────────────────────────────────────────────────────
-        _buildAddRow(),
+        // ── Header card ────────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x0855624D),
+                  blurRadius: 24,
+                  offset: Offset(0, 4)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.habitName,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildAddRow(),
+            ],
+          ),
+        ),
 
         const SizedBox(height: 24),
 
@@ -219,7 +246,7 @@ class _TodoHabitScreenState extends State<TodoHabitScreen> {
               hintStyle: TextStyle(
                   color: AppTheme.onSurfaceMuted, fontSize: 15),
               filled: true,
-              fillColor: AppTheme.surfaceCard,
+              fillColor: AppTheme.surfaceNest,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 12),
               border: OutlineInputBorder(
