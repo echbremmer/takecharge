@@ -45,7 +45,7 @@ class _AddHabitScreenState extends ConsumerState<AddHabitScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: const Text('TAKECHARGE'),
+        title: const Text('VANDAG'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),

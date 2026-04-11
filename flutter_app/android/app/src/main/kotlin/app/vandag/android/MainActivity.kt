@@ -1,4 +1,4 @@
-package app.takecharge.android
+package app.vandag.android
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -37,17 +37,17 @@ class _AppStartupState extends ConsumerState<AppStartup> {
   }
 
   @override
-  Widget build(BuildContext context) => const TakeChargeApp();
+  Widget build(BuildContext context) => const VandagApp();
 }
 
-class TakeChargeApp extends ConsumerWidget {
-  const TakeChargeApp({super.key});
+class VandagApp extends ConsumerWidget {
+  const VandagApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'TakeCharge',
+      title: 'Vandag',
       theme: AppTheme.light,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
